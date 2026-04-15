@@ -1,0 +1,86 @@
+# --- OS / editor ---
+.DS_Store
+.AppleDouble
+._*
+.Spotlight-V100
+.Trashes
+
+.cursor/
+.vscode/
+.idea/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+dist/
+build/
+*.egg-info/
+
+# --- Environments ---
+.env
+.venv/
+venv/
+ENV/
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+
+# --- Local secrets / config ---
+*.pem
+*.key
+*.p12
+*.pfx
+
+# --- Model weights / checkpoints (large) ---
+/models/
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+*.gguf
+*.onnx
+
+# Keep src/models/ package tracked but ignore weight folders inside it
+src/models/*/
+!src/models/__init__.py
+!src/models/wrapper.py
+
+# --- Datasets (all ignored for now) ---
+# TODO: re-evaluate once pipeline is implemented — we may want to track
+# small dataset files (e.g. MedQA, CrowS-Pairs) if they're needed for
+# reproducibility. For now everything under datasets/ and data/ stays local.
+datasets/
+data/
+
+# --- Run outputs (generated) ---
+results/**
+!results/.gitkeep
+runs/
+
+# --- Figures ---
+!figures/.gitkeep
+
+# --- Numpy / arrays (large) ---
+*.npz
+*.npy
+*.np
+
+# --- Common large archives ---
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.rar
+
+# --- Logs ---
+*.log
