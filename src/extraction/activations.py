@@ -16,6 +16,8 @@ from typing import Any
 import numpy as np
 import torch
 
+import pandas as pd
+
 from src.models.wrapper import locate_hidden_tensor
 from src.utils.io import atomic_save_json, ensure_dir
 from src.utils.logging import log
@@ -537,6 +539,9 @@ def build_and_save_extraction_summary(
     summary_path = run_dir / "A_extraction" / "extraction_summary.json"
     atomic_save_json(summary, summary_path)
 
+    # Also build metadata.parquet for downstream use (A3, B1, etc.).
+    save_metadata_parquet(run_dir, categories)
+
     log(f"\nExtraction summary -> {summary_path}")
     log(f"Total items: {summary['total_items']}")
 
@@ -555,3 +560,49 @@ def build_and_save_extraction_summary(
                     f"    {sg:>25s}: {info['stereotyped_rate']:.3f} "
                     f"({info['n_stereotyped']}/{info['n_ambig_items']})"
                 )
+
+
+def save_metadata_parquet(run_dir: Path, categories: list[str]) -> None:
+    """Create a flat metadata parquet from all extracted .npz files.
+
+    One row per item with all behavioral metadata.  Used by A3
+    (per-subgroup L0), B1 (comparison groups), and all Phase B/C scripts.
+
+    ``stereotyped_groups`` is stored as a JSON-encoded string for
+    universal parquet compatibility.
+    """
+    records: list[dict[str, Any]] = []
+    act_dir = run_dir / "A_extraction" / "activations"
+
+    for cat_dir in sorted(act_dir.iterdir()):
+        if not cat_dir.is_dir():
+            continue
+        for npz_path in sorted(cat_dir.glob("item_*.npz")):
+            try:
+                data = np.load(npz_path, allow_pickle=True)
+                raw = data["metadata_json"]
+                meta_str = raw.item() if raw.shape == () else str(raw)
+                meta = json.loads(meta_str)
+                records.append({
+                    "item_idx": meta["item_idx"],
+                    "category": meta["category"],
+                    "model_answer": meta["model_answer"],
+                    "model_answer_role": meta["model_answer_role"],
+                    "is_stereotyped_response": meta["is_stereotyped_response"],
+                    "is_correct": meta["is_correct"],
+                    "context_condition": meta["context_condition"],
+                    "stereotyped_groups": json.dumps(meta["stereotyped_groups"]),
+                    "n_target_groups": meta["n_target_groups"],
+                    "margin": meta["margin"],
+                    "question_polarity": meta["question_polarity"],
+                    "correct_letter": meta["correct_letter"],
+                    "stereotyped_option": meta["stereotyped_option"],
+                })
+            except Exception as e:
+                log(f"  WARNING: failed to read {npz_path}: {e}")
+
+    if records:
+        df = pd.DataFrame(records)
+        out_path = run_dir / "A_extraction" / "metadata.parquet"
+        df.to_parquet(out_path, index=False, compression="snappy")
+        log(f"Saved metadata.parquet: {len(df)} items → {out_path}")
