@@ -210,3 +210,13 @@ C4_token_features
   NOTE:   Per-token SAE activations via model hooks.
           Only top-3 features per subgroup.
           Filters template tokens.
+
+
+## Execution Dependencies
+A1 → A2 → A3 ──┬── B1 → B2 → B5
+                │           ↓
+                ├── B3      C1 → C2
+                │            ↓
+                ├── B4      C3
+                │            
+                └───────── C4 (needs model + B2 + C1)

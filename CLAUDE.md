@@ -50,10 +50,13 @@ After registering any hook, ALWAYS call `wrapper.validate_hooks()` before runnin
 ## Key Conventions
 - Activations: float32 `.npz` files, one per item, under `activations/{so,gi}/`
 - Directions: unit-normalized per layer after computing mean delta
-- Gender decomposition: Gram-Schmidt via `(d_gay - d_lesbian) / 2`, then project out
 - Bias scores: BBQ formula `2 * (n_stereo / n_non_unknown) - 1`
 - Figures: Wong colorblind palette (#E69F00 orange, #0072B2 blue, #009E73 green, #CC79A7 purple), matplotlib Agg backend, 150 DPI
 - All results namespaced: `results/runs/{model_id}/{run_date}/`
+
+
+
+
 
 ## Things That Break Silently (Watch For These)
 1. **Hook output structure**: Llama output[0] is the hidden state. Other architectures may differ. The wrapper must inspect and validate this.
