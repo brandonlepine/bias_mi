@@ -20,7 +20,7 @@ import pandas as pd
 
 from src.models.wrapper import locate_hidden_tensor
 from src.utils.io import atomic_save_json, ensure_dir
-from src.utils.logging import log
+from src.utils.logging import log, progress_bar
 
 
 # ---------------------------------------------------------------------------
@@ -311,7 +311,8 @@ def extract_category(
 
     token_diagnostic_done = False
 
-    for item in items:
+    pbar = progress_bar(items, desc=f"  {category}", unit="items")
+    for item in pbar:
         item_idx = item["item_idx"]
         out_path = output_dir / f"item_{item_idx:06d}.npz"
 
@@ -335,9 +336,10 @@ def extract_category(
 
         # First-item validation and token diagnostic.
         if not token_diagnostic_done:
+            pbar.set_postfix_str("validating first item...")
             hs = result["hidden_states"]
             norms_check = np.linalg.norm(hs.astype(np.float32), axis=1)
-            log(f"  Validation: shape={hs.shape}, expected=({n_layers}, {hidden_dim})")
+            log(f"\n  Validation: shape={hs.shape}, expected=({n_layers}, {hidden_dim})")
             log(f"  Norm range after normalization: "
                 f"[{norms_check.min():.4f}, {norms_check.max():.4f}]")
             log(f"  Model answer: {result['metadata']['model_answer']} "
@@ -356,10 +358,12 @@ def extract_category(
             token_diagnostic_done = True
 
         # Save .npz atomically.
+        # np.savez auto-appends .npz if the path doesn't end in .npz,
+        # so the temp file must end in .npz to avoid double-suffix.
         metadata_json_str = json.dumps(
             result["metadata"], ensure_ascii=False,
         )
-        tmp_path = out_path.with_suffix(".npz.tmp")
+        tmp_path = out_path.parent / (out_path.stem + "_tmp.npz")
         np.savez(
             tmp_path,
             hidden_states=result["hidden_states"],
@@ -370,18 +374,18 @@ def extract_category(
 
         all_metadata.append(result["metadata"])
         n_extracted += 1
-
-        # Progress logging.
-        if n_extracted == 1 or n_extracted % 100 == 0:
-            log(f"  [{n_extracted + n_skipped}/{n_total}] "
-                f"extracted={n_extracted} skipped={n_skipped} "
-                f"last_answer={result['metadata']['model_answer']}")
+        pbar.set_postfix_str(
+            f"ext={n_extracted} skip={n_skipped} "
+            f"ans={result['metadata']['model_answer']}"
+        )
 
         # Memory management.
         if device == "mps" and n_extracted % 50 == 0:
             torch.mps.empty_cache()
         elif device.startswith("cuda") and n_extracted % 100 == 0:
             torch.cuda.empty_cache()
+
+    pbar.close()
 
     log(f"  Complete: {n_extracted} extracted, {n_skipped} skipped")
 

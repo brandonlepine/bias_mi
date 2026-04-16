@@ -2,6 +2,8 @@
 
 import time
 
+from tqdm import tqdm
+
 
 def log(msg: str, flush: bool = True) -> None:
     """Print a message with flush=True for tee piping compatibility."""
@@ -9,7 +11,10 @@ def log(msg: str, flush: bool = True) -> None:
 
 
 class ProgressLogger:
-    """Tracks and logs progress for item-level processing loops."""
+    """Tracks and logs progress for item-level processing loops.
+
+    Kept for backward compatibility — new code should prefer ``progress_bar``.
+    """
 
     def __init__(self, total: int, prefix: str = ""):
         self.total = total
@@ -38,3 +43,38 @@ class ProgressLogger:
             parts.insert(0, self.prefix)
         parts.append(f"skipped ({reason})")
         log(" ".join(parts))
+
+
+def progress_bar(
+    iterable: any = None,
+    total: int | None = None,
+    desc: str = "",
+    unit: str = "it",
+    disable: bool = False,
+    **kwargs: any,
+) -> tqdm:
+    """Create a tqdm progress bar with project-standard settings.
+
+    Works in terminals, Jupyter notebooks, and piped output.  All pipeline
+    loops should use this instead of bare ``for`` loops.
+
+    Examples::
+
+        for item in progress_bar(items, desc="Extracting"):
+            process(item)
+
+        pbar = progress_bar(total=100, desc="Layer 14")
+        for i in range(100):
+            pbar.update(1)
+        pbar.close()
+    """
+    return tqdm(
+        iterable,
+        total=total,
+        desc=desc,
+        unit=unit,
+        disable=disable,
+        dynamic_ncols=True,
+        leave=True,
+        **kwargs,
+    )

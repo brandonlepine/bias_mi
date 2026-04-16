@@ -19,7 +19,7 @@ import torch
 
 from src.sae.wrapper import SAEWrapper
 from src.utils.io import atomic_save_json, ensure_dir
-from src.utils.logging import log
+from src.utils.logging import log, progress_bar
 
 
 # ---------------------------------------------------------------------------
@@ -300,7 +300,9 @@ def encode_layer(
         batch_hs: list[np.ndarray] = []
         batch_idxs: list[int] = []
 
-        for npz_i, npz_path in enumerate(npz_paths):
+        for npz_i, npz_path in enumerate(progress_bar(
+            npz_paths, desc=f"    {cat}", unit="items",
+        )):
             data = np.load(npz_path, allow_pickle=True)
             hs_normed = data["hidden_states"][layer].astype(np.float32)
             raw_norm = float(data["hidden_states_raw_norms"][layer])
@@ -324,9 +326,6 @@ def encode_layer(
                     validation_done = True
                 batch_hs.clear()
                 batch_idxs.clear()
-
-            if (npz_i + 1) % 500 == 0 or npz_i == 0:
-                log(f"    [{npz_i + 1}/{n_items}]")
 
         all_records.extend(cat_records)
 
