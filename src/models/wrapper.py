@@ -182,6 +182,29 @@ class ModelWrapper:
             )
         return o_proj
 
+    # ── Unembedding matrix ─────────────────────────────────────────────
+
+    def get_unembedding_matrix(self) -> torch.Tensor:
+        """Return the model's output unembedding matrix.
+
+        Returns shape ``(hidden_dim, vocab_size)`` so that
+        ``W_U.T @ hidden_state`` gives logit contributions per vocab token.
+
+        Handles Llama (``lm_head.weight``), GPT-2 (``lm_head.weight``),
+        GPT-NeoX (``embed_out.weight``).
+        """
+        candidates = ["lm_head", "embed_out"]
+        lm_head = _pick_first_attr(self.model, candidates)
+        if lm_head is None:
+            raise RuntimeError(
+                f"Cannot find output head (lm_head / embed_out) on "
+                f"{type(self.model).__name__}"
+            )
+        W = lm_head.weight.detach()  # typically (vocab_size, hidden_dim)
+        if W.shape[0] != self.hidden_dim:
+            W = W.T  # → (hidden_dim, vocab_size)
+        return W
+
     # ── Hook registration ─────────────────────────────────────────────
 
     def _new_counter(self, name: str) -> _HookCounter:

@@ -1,0 +1,1309 @@
+"""C1: Subgroup-specific steering optimisation.
+
+For each subgroup with significant pro-bias features from B1/B2, finds the
+optimal single-hook steering configuration (k features, target vector norm τ)
+that maximises debiasing efficiency η = RCR₁.₀ / ‖v‖₂.
+
+Produces per-subgroup steering vectors consumed by C2, C3, and C4.  Also runs
+exacerbation tests (positive-direction steering) to characterise the asymmetry
+between debiasing and bias-amplification.
+
+Usage:
+    python scripts/C1_steering.py --run_dir runs/llama-3.1-8b_2026-04-15/
+
+    # Quick test
+    python scripts/C1_steering.py --run_dir runs/llama-3.1-8b_2026-04-15/ --max_items 20
+
+    # Specific categories / subgroups
+    python scripts/C1_steering.py --run_dir runs/llama-3.1-8b_2026-04-15/ --categories so,disability
+    python scripts/C1_steering.py --run_dir runs/llama-3.1-8b_2026-04-15/ --subgroups so/gay,race/black
+
+    # Skip exacerbation, override target norms
+    python scripts/C1_steering.py --run_dir runs/llama-3.1-8b_2026-04-15/ --skip_exacerbation
+    python scripts/C1_steering.py --run_dir runs/llama-3.1-8b_2026-04-15/ --target_norms -0.5,-1,-2,-5,-10,-20,-40
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import time
+from collections import Counter
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+import pandas as pd
+import torch
+
+from src.metrics.bias_metrics import (
+    build_result_dict,
+    compute_all_metrics,
+)
+from src.models.wrapper import ModelWrapper
+from src.sae.wrapper import SAEWrapper
+from src.sae_localization.steering import SAESteerer
+from src.utils.config import load_config
+from src.utils.io import atomic_save_json, ensure_dir
+from src.utils.logging import log, progress_bar
+
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+DEFAULT_TARGET_NORMS = [-0.5, -1.0, -2.0, -5.0, -10.0, -20.0, -40.0, -80.0]
+BASE_K_STEPS = [1, 2, 3, 5, 8, 13, 21, 34, 55]
+DEFAULT_MIN_N_PER_GROUP = 10
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="C1: Subgroup-specific steering optimisation")
+    p.add_argument("--run_dir", required=True, type=str,
+                   help="Path to run directory (e.g. runs/llama-3.1-8b_2026-04-15/)")
+    p.add_argument("--categories", type=str, default=None,
+                   help="Comma-separated category filter (e.g. so,disability)")
+    p.add_argument("--subgroups", type=str, default=None,
+                   help="Comma-separated subgroup filter (format: cat/sub)")
+    p.add_argument("--max_items", type=int, default=None,
+                   help="Max items per subgroup group (for quick tests)")
+    p.add_argument("--min_n_per_group", type=int, default=DEFAULT_MIN_N_PER_GROUP,
+                   help="Minimum items per stereotype/non-stereotype group")
+    p.add_argument("--skip_exacerbation", action="store_true",
+                   help="Skip exacerbation tests")
+    p.add_argument("--skip_figures", action="store_true",
+                   help="Skip figure generation")
+    p.add_argument("--target_norms", type=str, default=None,
+                   help="Comma-separated target norm values (negative for debiasing)")
+    return p.parse_args()
+
+
+# ---------------------------------------------------------------------------
+# Vector construction
+# ---------------------------------------------------------------------------
+
+def build_subgroup_steering_vector(
+    top_k_features: list[dict[str, Any]],
+    sae_cache: dict[int, SAEWrapper],
+    alpha: float,
+    device: torch.device,
+    dtype: torch.dtype,
+) -> tuple[torch.Tensor, float]:
+    """Construct steering vector as α × mean of unit-normalised decoder columns.
+
+    Features may come from different layers; their decoder columns are all in
+    the same ambient space (R^hidden_dim) so averaging is well-defined.
+
+    Returns
+    -------
+    vec : Tensor
+        Shape ``(hidden_dim,)``.
+    mean_dir_norm : float
+        ``||mean_of_unit_directions||`` — needed to convert target_norm → alpha.
+    """
+    directions = []
+    for f in top_k_features:
+        sae = sae_cache[f["layer"]]
+        d = sae.get_feature_direction(f["feature_idx"])  # unit-normalised
+        directions.append(torch.from_numpy(d).float())
+
+    stacked = torch.stack(directions, dim=0)  # (k, hidden_dim)
+    mean_dir = stacked.mean(dim=0)             # (hidden_dim,)
+    mean_dir_norm = float(mean_dir.norm().item())
+
+    vec = (alpha * mean_dir).to(dtype=dtype, device=device)
+    return vec, mean_dir_norm
+
+
+def alpha_for_target_norm(target_norm: float, mean_dir_norm: float) -> float:
+    """Compute alpha so that ||alpha * mean_dir|| == |target_norm|, sign preserved."""
+    if mean_dir_norm < 1e-8:
+        return 0.0
+    return target_norm / mean_dir_norm
+
+
+# ---------------------------------------------------------------------------
+# Data loading helpers
+# ---------------------------------------------------------------------------
+
+def load_ranked_features(run_dir: Path) -> pd.DataFrame:
+    """Load B2 ranked features parquet."""
+    path = run_dir / "B_feature_ranking" / "ranked_features.parquet"
+    df = pd.read_parquet(path)
+    log(f"Loaded {len(df)} ranked features from {path}")
+    return df
+
+
+def load_injection_layers(run_dir: Path) -> dict[str, Any]:
+    """Load B2 injection layers JSON."""
+    path = run_dir / "B_feature_ranking" / "injection_layers.json"
+    with open(path) as f:
+        data = json.load(f)
+    log(f"Loaded injection layers for {len(data)} subgroups")
+    return data
+
+
+def load_artifact_flags(run_dir: Path) -> set[tuple[int, int]]:
+    """Load B5 artifact flags, returning set of (feature_idx, layer) pairs."""
+    path = run_dir / "B_feature_interpretability" / "artifact_flags.json"
+    if not path.exists():
+        log("No artifact_flags.json found; no features excluded")
+        return set()
+    with open(path) as f:
+        data = json.load(f)
+    flagged = set()
+    for entry in data.get("flagged_features", []):
+        flagged.add((entry["feature_idx"], entry["layer"]))
+    log(f"Loaded {len(flagged)} flagged feature (idx, layer) pairs for exclusion")
+    return flagged
+
+
+def filter_flagged_features(
+    df: pd.DataFrame, flagged_set: set[tuple[int, int]],
+) -> pd.DataFrame:
+    """Remove flagged features from the ranked features dataframe."""
+    if not flagged_set:
+        return df
+    before = len(df)
+    mask = df.apply(
+        lambda row: (row["feature_idx"], row["layer"]) not in flagged_set,
+        axis=1,
+    )
+    df = df[mask].copy()
+    removed = before - len(df)
+    if removed > 0:
+        log(f"  Removed {removed} flagged features from ranking")
+    return df
+
+
+def load_metadata(run_dir: Path) -> pd.DataFrame:
+    """Load A2 metadata parquet."""
+    path = run_dir / "A_extraction" / "metadata.parquet"
+    df = pd.read_parquet(path)
+    log(f"Loaded metadata: {len(df)} items")
+    return df
+
+
+def load_stimuli(run_dir: Path, category: str) -> list[dict[str, Any]]:
+    """Load stimuli JSON for a category."""
+    path = run_dir / "A_extraction" / "stimuli" / f"{category}.json"
+    with open(path) as f:
+        data = json.load(f)
+    return data
+
+
+def get_ranked_pro_bias_features(
+    df: pd.DataFrame, category: str, subgroup: str,
+) -> list[dict[str, Any]]:
+    """Get ranked pro-bias features for a subgroup as list of dicts."""
+    sub_df = df[
+        (df["category"] == category)
+        & (df["subgroup"] == subgroup)
+        & (df["direction"] == "pro_bias")
+    ].sort_values("rank")
+
+    features = []
+    for _, row in sub_df.iterrows():
+        features.append({
+            "feature_idx": int(row["feature_idx"]),
+            "layer": int(row["layer"]),
+            "rank": int(row["rank"]),
+            "cohens_d": float(row["cohens_d"]),
+        })
+    return features
+
+
+# ---------------------------------------------------------------------------
+# Subgroup enumeration
+# ---------------------------------------------------------------------------
+
+def determine_subgroups(
+    ranked_df: pd.DataFrame,
+    injection_layers: dict[str, Any],
+    filter_categories: str | None,
+    filter_subgroups: str | None,
+) -> list[tuple[str, str]]:
+    """Determine which (category, subgroup) pairs to process."""
+    # Get all subgroups that have pro-bias features AND injection layers
+    all_pairs = set()
+    for key, entry in injection_layers.items():
+        if "/" not in key:
+            continue
+        cat, sub = key.split("/", 1)
+        pro_bias = entry.get("pro_bias")
+        if pro_bias is None:
+            continue
+        if "injection_layer" not in pro_bias:
+            continue
+        all_pairs.add((cat, sub))
+
+    # Apply category filter
+    if filter_categories:
+        cats = set(filter_categories.split(","))
+        all_pairs = {(c, s) for c, s in all_pairs if c in cats}
+
+    # Apply subgroup filter
+    if filter_subgroups:
+        subs = set(filter_subgroups.split(","))
+        all_pairs = {(c, s) for c, s in all_pairs if f"{c}/{s}" in subs}
+
+    result = sorted(all_pairs)
+    log(f"Will process {len(result)} subgroups")
+    return result
+
+
+def identify_needed_layers(
+    ranked_df: pd.DataFrame,
+    subgroups: list[tuple[str, str]],
+    max_k: int = 55,
+) -> set[int]:
+    """Identify all SAE layers needed across all subgroups."""
+    needed = set()
+    for cat, sub in subgroups:
+        sub_df = ranked_df[
+            (ranked_df["category"] == cat)
+            & (ranked_df["subgroup"] == sub)
+            & (ranked_df["direction"] == "pro_bias")
+        ].sort_values("rank").head(max_k)
+        for _, row in sub_df.iterrows():
+            needed.add(int(row["layer"]))
+    return needed
+
+
+# ---------------------------------------------------------------------------
+# Item partitioning
+# ---------------------------------------------------------------------------
+
+def partition_items(
+    metadata_df: pd.DataFrame,
+    stimuli: list[dict[str, Any]],
+    category: str,
+    subgroup: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Partition items into stereotyped-response and non-stereotyped-response.
+
+    Only ambiguous items targeting the subgroup are included.
+
+    Returns
+    -------
+    stereo_items : list[dict]
+        Items where the model gave a stereotyped response.
+    non_stereo_items : list[dict]
+        Items where the model gave a non-stereotyped response.
+    """
+    # Build a lookup from item_idx to metadata row
+    cat_meta = metadata_df[metadata_df["category"] == category]
+    meta_by_idx: dict[int, dict[str, Any]] = {}
+    for _, row in cat_meta.iterrows():
+        meta_by_idx[int(row["item_idx"])] = row.to_dict()
+
+    # Build a lookup from item_idx to stimulus
+    stim_by_idx = {s["item_idx"]: s for s in stimuli}
+
+    stereo_items: list[dict[str, Any]] = []
+    non_stereo_items: list[dict[str, Any]] = []
+
+    for item_idx, stim in stim_by_idx.items():
+        # Only ambiguous items
+        if stim.get("context_condition") != "ambig":
+            continue
+
+        # Only items targeting this subgroup
+        stereo_groups = stim.get("stereotyped_groups", [])
+        if subgroup not in stereo_groups:
+            continue
+
+        meta = meta_by_idx.get(item_idx)
+        if meta is None:
+            continue
+
+        model_answer_role = meta.get("model_answer_role", "")
+
+        item_record = {
+            "item_idx": item_idx,
+            "prompt": stim["prompt"],
+            "stereotyped_option": stim.get("stereotyped_option"),
+            "model_answer_role": model_answer_role,
+        }
+
+        if model_answer_role == "stereotyped_target":
+            stereo_items.append(item_record)
+        else:
+            non_stereo_items.append(item_record)
+
+    return stereo_items, non_stereo_items
+
+
+# ---------------------------------------------------------------------------
+# Baseline computation
+# ---------------------------------------------------------------------------
+
+def compute_baselines(
+    steerer: SAESteerer,
+    items: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Compute baseline (no-steering) forward passes for a list of items.
+
+    Returns list of baseline result dicts (one per item, in order).
+    """
+    baselines = []
+    for item in items:
+        bl = steerer.evaluate_baseline(item["prompt"])
+        baselines.append(bl)
+    return baselines
+
+
+# ---------------------------------------------------------------------------
+# Checkpoint naming
+# ---------------------------------------------------------------------------
+
+def config_ckpt_name(cat: str, sub: str, k: int, target_norm: float) -> str:
+    """Build deterministic checkpoint filename.
+
+    target_norm = -1.25 → "norm-0125"
+    target_norm = -10.0 → "norm-1000"
+    target_norm = +5.0  → "norm+0500"
+    """
+    norm_int = int(round(target_norm * 100))
+    return f"{cat}_{sub}_k{k:03d}_norm{norm_int:+05d}.json"
+
+
+# ---------------------------------------------------------------------------
+# Phase 1: Target-norm viability at k=1
+# ---------------------------------------------------------------------------
+
+def run_phase1(
+    pro_bias_features: list[dict[str, Any]],
+    sae_cache: dict[int, SAEWrapper],
+    baselines: list[dict[str, Any]],
+    stereo_items: list[dict[str, Any]],
+    steerer: SAESteerer,
+    target_norms: list[float],
+    dtype: torch.dtype,
+    output_dir: Path,
+    cat: str,
+    sub: str,
+) -> dict[str, Any]:
+    """Sweep target_norms at k=1 to identify viable magnitudes.
+
+    A target_norm is viable if:
+        - RCR_1.0 > 0 (some correction occurs)
+        - degeneration_rate < 0.05
+    """
+    ckpt_dir = output_dir / "checkpoints"
+    phase1_ckpt = ckpt_dir / f"{cat}_{sub}_phase1.json"
+
+    if phase1_ckpt.exists():
+        with open(phase1_ckpt) as f:
+            loaded = json.load(f)
+        log(f"  Phase 1: LOADED from checkpoint")
+        return loaded
+
+    # Compute mean_dir_norm at k=1
+    top_1 = pro_bias_features[:1]
+    _, mean_norm_k1 = build_subgroup_steering_vector(
+        top_1, sae_cache, alpha=1.0,
+        device=torch.device(steerer.device), dtype=dtype,
+    )
+
+    results: dict[str, Any] = {}
+
+    for tn in target_norms:
+        alpha = alpha_for_target_norm(tn, mean_norm_k1)
+        vec, _ = build_subgroup_steering_vector(
+            top_1, sae_cache, alpha,
+            device=torch.device(steerer.device), dtype=dtype,
+        )
+        vec_norm = float(vec.norm().item())
+
+        per_item: list[dict[str, Any]] = []
+        for item, baseline in zip(stereo_items, baselines):
+            steered = steerer.steer_and_evaluate(item["prompt"], vec)
+            per_item.append(build_result_dict(item, baseline, steered, vec))
+
+        metrics = compute_all_metrics(per_item)
+        degen = sum(1 for r in per_item if r["degenerated"]) / len(per_item)
+        corrupt = sum(1 for r in per_item if r["corrupted"]) / len(per_item)
+
+        results[str(tn)] = {
+            "target_norm": tn,
+            "alpha": alpha,
+            "vector_norm": vec_norm,
+            "rcr_1.0": metrics["rcr_1.0"]["rcr"],
+            "degeneration_rate": degen,
+            "corruption_rate": corrupt,
+            "n_items": len(per_item),
+        }
+
+        log(f"    τ={tn:+.1f} α={alpha:+.2f} ||v||={vec_norm:.2f}: "
+            f"RCR₁.₀={metrics['rcr_1.0']['rcr']:.3f} degen={degen:.3f}")
+
+    atomic_save_json(results, phase1_ckpt)
+    return results
+
+
+def identify_viable_target_norms(phase1_results: dict[str, Any]) -> list[float]:
+    """Select target_norms passing viability criteria."""
+    viable = [
+        float(tn) for tn, r in phase1_results.items()
+        if r["rcr_1.0"] > 0 and r["degeneration_rate"] < 0.05
+    ]
+
+    if len(viable) < 2:
+        # Relax to degen < 0.10
+        viable = [
+            float(tn) for tn, r in phase1_results.items()
+            if r["degeneration_rate"] < 0.10
+        ]
+
+    return sorted(viable, reverse=True)  # ascending magnitude: [-0.5, -1, -2, ...]
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: Joint (k, target_norm) sweep
+# ---------------------------------------------------------------------------
+
+def build_k_steps(n_features: int) -> list[int]:
+    """K values from base list that don't exceed n_features."""
+    return [k for k in BASE_K_STEPS if k <= n_features]
+
+
+def run_phase2(
+    pro_bias_features: list[dict[str, Any]],
+    sae_cache: dict[int, SAEWrapper],
+    baselines: list[dict[str, Any]],
+    stereo_items: list[dict[str, Any]],
+    steerer: SAESteerer,
+    k_steps: list[int],
+    viable_target_norms: list[float],
+    dtype: torch.dtype,
+    output_dir: Path,
+    cat: str,
+    sub: str,
+    injection_layer: int,
+) -> list[dict[str, Any]]:
+    """Full (k, target_norm) sweep with per-config checkpointing."""
+    ckpt_dir = output_dir / "checkpoints"
+    grid: list[dict[str, Any]] = []
+    device = torch.device(steerer.device)
+
+    for k in k_steps:
+        top_k = pro_bias_features[:k]
+        # Compute mean_dir_norm for this k
+        _, mean_norm_k = build_subgroup_steering_vector(
+            top_k, sae_cache, alpha=1.0, device=device, dtype=dtype,
+        )
+
+        for tn in viable_target_norms:
+            ckpt_name = config_ckpt_name(cat, sub, k, tn)
+            ckpt_path = ckpt_dir / ckpt_name
+
+            if ckpt_path.exists():
+                with open(ckpt_path) as f:
+                    record = json.load(f)
+                grid.append(record)
+                log(f"    k={k:03d} τ={tn:+.1f}: LOADED from checkpoint")
+                continue
+
+            alpha = alpha_for_target_norm(tn, mean_norm_k)
+            vec, _ = build_subgroup_steering_vector(
+                top_k, sae_cache, alpha, device=device, dtype=dtype,
+            )
+            vec_norm = float(vec.norm().item())
+
+            per_item: list[dict[str, Any]] = []
+            for item, baseline in zip(stereo_items, baselines):
+                steered = steerer.steer_and_evaluate(item["prompt"], vec)
+                per_item.append(build_result_dict(item, baseline, steered, vec))
+
+            metrics = compute_all_metrics(per_item)
+            degen = sum(1 for r in per_item if r["degenerated"]) / len(per_item)
+            corrupt = sum(1 for r in per_item if r["corrupted"]) / len(per_item)
+
+            rcr_1 = metrics["rcr_1.0"]["rcr"]
+            eta = rcr_1 / max(vec_norm, 1e-8)
+
+            record = {
+                "category": cat,
+                "subgroup": sub,
+                "k": k,
+                "target_norm": tn,
+                "alpha": alpha,
+                "injection_layer": injection_layer,
+                "vector_norm": vec_norm,
+                "eta": eta,
+                "metrics": metrics,
+                "degeneration_rate": degen,
+                "corruption_rate": corrupt,
+                "n_items": len(per_item),
+                "per_item_results": per_item,
+            }
+
+            atomic_save_json(record, ckpt_path)
+            grid.append(record)
+
+            log(f"    k={k:03d} τ={tn:+.1f} α={alpha:+.2f}: "
+                f"RCR₁.₀={rcr_1:.3f} η={eta:.3f} ||v||={vec_norm:.2f} "
+                f"degen={degen:.3f} corrupt={corrupt:.3f}")
+
+    return grid
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Optimal selection
+# ---------------------------------------------------------------------------
+
+def select_optimal(grid: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Select optimal configuration from the grid.
+
+    Safety constraints:
+        - degeneration_rate < 0.05
+        - corruption_rate < 0.05
+
+    Primary metric: max eta.
+    Tie-breaking within 1% of best eta: smaller vector_norm, then higher eta.
+    """
+    safe = [
+        r for r in grid
+        if r["degeneration_rate"] < 0.05 and r["corruption_rate"] < 0.05
+    ]
+
+    if not safe:
+        safe = [
+            r for r in grid
+            if r["degeneration_rate"] < 0.10 and r["corruption_rate"] < 0.05
+        ]
+        if safe:
+            log(f"    WARNING: relaxed degen<0.10 to find safe configs")
+
+    if not safe:
+        return None
+
+    best_eta = max(r["eta"] for r in safe)
+
+    # Within 1% of best
+    candidates = [r for r in safe if r["eta"] >= best_eta * 0.99]
+    candidates.sort(key=lambda r: (r["vector_norm"], -r["eta"]))
+
+    return candidates[0]
+
+
+# ---------------------------------------------------------------------------
+# Phase 4: Marginal analysis
+# ---------------------------------------------------------------------------
+
+def compute_marginal_analysis(
+    grid: list[dict[str, Any]], optimal: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """At optimal target_norm, show how RCR and ||v|| evolve with k."""
+    optimal_tn = optimal["target_norm"]
+    relevant = [r for r in grid if r["target_norm"] == optimal_tn]
+    relevant.sort(key=lambda r: r["k"])
+
+    marginal: list[dict[str, Any]] = []
+    for i, r in enumerate(relevant):
+        entry: dict[str, Any] = {
+            "k": r["k"],
+            "rcr_1.0": r["metrics"]["rcr_1.0"]["rcr"],
+            "vector_norm": r["vector_norm"],
+            "eta": r["eta"],
+        }
+        if i > 0:
+            prev = relevant[i - 1]
+            entry["marginal_rcr_gain"] = (
+                r["metrics"]["rcr_1.0"]["rcr"]
+                - prev["metrics"]["rcr_1.0"]["rcr"]
+            )
+            entry["marginal_norm_cost"] = r["vector_norm"] - prev["vector_norm"]
+            denom = max(abs(entry["marginal_norm_cost"]), 1e-8)
+            entry["marginal_efficiency"] = entry["marginal_rcr_gain"] / denom
+        marginal.append(entry)
+
+    return marginal
+
+
+# ---------------------------------------------------------------------------
+# Exacerbation test
+# ---------------------------------------------------------------------------
+
+def run_exacerbation_test(
+    optimal: dict[str, Any],
+    pro_bias_features: list[dict[str, Any]],
+    sae_cache: dict[int, SAEWrapper],
+    steerer: SAESteerer,
+    stereo_items: list[dict[str, Any]],
+    non_stereo_items: list[dict[str, Any]],
+    baselines_stereo: list[dict[str, Any]],
+    dtype: torch.dtype,
+    output_dir: Path,
+    cat: str,
+    sub: str,
+) -> dict[str, Any]:
+    """At +|optimal_target_norm| (exacerbation direction):
+    1. Test corruption on non-stereotyped items
+    2. Test amplification on stereotyped items
+    """
+    ckpt_path = output_dir / "checkpoints" / f"{cat}_{sub}_exac.json"
+    if ckpt_path.exists():
+        with open(ckpt_path) as f:
+            loaded = json.load(f)
+        log(f"  Exacerbation: LOADED from checkpoint")
+        return loaded
+
+    exac_target_norm = abs(optimal["target_norm"])
+    k = optimal["k"]
+    device = torch.device(steerer.device)
+
+    top_k = pro_bias_features[:k]
+    _, mean_norm = build_subgroup_steering_vector(
+        top_k, sae_cache, alpha=1.0, device=device, dtype=dtype,
+    )
+    exac_alpha = alpha_for_target_norm(exac_target_norm, mean_norm)
+    vec, _ = build_subgroup_steering_vector(
+        top_k, sae_cache, exac_alpha, device=device, dtype=dtype,
+    )
+    vec_norm = float(vec.norm().item())
+
+    # Baselines for non_stereo_items
+    baselines_non_stereo = compute_baselines(steerer, non_stereo_items)
+
+    # Test on non_stereo items (corruption check)
+    per_item_non_stereo: list[dict[str, Any]] = []
+    for item, baseline in zip(non_stereo_items, baselines_non_stereo):
+        steered = steerer.steer_and_evaluate(item["prompt"], vec)
+        per_item_non_stereo.append(build_result_dict(item, baseline, steered, vec))
+
+    metrics_non_stereo = compute_all_metrics(per_item_non_stereo)
+    corruption_rate = (
+        sum(1 for r in per_item_non_stereo if r["corrupted"])
+        / max(len(per_item_non_stereo), 1)
+    )
+
+    # Test on stereo items (amplification check)
+    per_item_stereo: list[dict[str, Any]] = []
+    for item, baseline in zip(stereo_items, baselines_stereo):
+        steered = steerer.steer_and_evaluate(item["prompt"], vec)
+        per_item_stereo.append(build_result_dict(item, baseline, steered, vec))
+
+    # Amplification: did logit for stereotyped_option INCREASE?
+    stereo_logit_shifts: list[float] = []
+    for r in per_item_stereo:
+        opt = r.get("stereotyped_option")
+        if opt and opt in r["logit_baseline"] and opt in r["logit_steered"]:
+            stereo_logit_shifts.append(
+                r["logit_steered"][opt] - r["logit_baseline"][opt]
+            )
+
+    mean_amplification = (
+        float(np.mean(stereo_logit_shifts)) if stereo_logit_shifts else None
+    )
+    frac_amplified = (
+        float(sum(1 for s in stereo_logit_shifts if s > 0) / len(stereo_logit_shifts))
+        if stereo_logit_shifts else None
+    )
+
+    result = {
+        "exac_target_norm": exac_target_norm,
+        "exac_alpha": exac_alpha,
+        "vector_norm": vec_norm,
+        "n_non_stereo_items": len(non_stereo_items),
+        "n_stereo_items": len(stereo_items),
+        "corruption_rate_non_stereo": corruption_rate,
+        "metrics_non_stereo": metrics_non_stereo,
+        "mean_logit_amplification_stereo": mean_amplification,
+        "fraction_amplified_stereo": frac_amplified,
+        "per_item_non_stereo": per_item_non_stereo,
+        "per_item_stereo": per_item_stereo,
+    }
+
+    # Save checkpoint WITHOUT per-item lists (too large for JSON checkpoints)
+    ckpt_data = {k: v for k, v in result.items()
+                 if k not in ("per_item_non_stereo", "per_item_stereo")}
+    atomic_save_json(ckpt_data, ckpt_path)
+
+    log(f"  Exacerbation: corruption={corruption_rate:.3f}, "
+        f"mean_amplification={mean_amplification if mean_amplification is not None else 'n/a'}")
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Per-item parquet saving
+# ---------------------------------------------------------------------------
+
+def save_per_item_parquet(
+    output_dir: Path,
+    cat: str,
+    sub: str,
+    optimal: dict[str, Any],
+    exac_result: dict[str, Any] | None,
+) -> None:
+    """Save consolidated per-item results at optimal config."""
+    rows: list[dict[str, Any]] = []
+
+    # Debiasing at optimal
+    per_item_optimal = optimal.get("per_item_results", [])
+    for r in per_item_optimal:
+        row = _flatten_result(r, cat, sub, optimal, condition="debiasing_optimal")
+        rows.append(row)
+
+    # Exacerbation results on stereo items
+    if exac_result and "per_item_stereo" in exac_result:
+        exac_config = {
+            "k": optimal.get("k"),
+            "target_norm": exac_result.get("exac_target_norm"),
+            "alpha": exac_result.get("exac_alpha"),
+            "injection_layer": optimal.get("injection_layer"),
+            "vector_norm": exac_result.get("vector_norm"),
+        }
+        for r in exac_result["per_item_stereo"]:
+            row = _flatten_result(r, cat, sub, exac_config,
+                                  condition="exacerbation_optimal")
+            rows.append(row)
+
+    # Exacerbation results on non-stereo items
+    if exac_result and "per_item_non_stereo" in exac_result:
+        exac_config = {
+            "k": optimal.get("k"),
+            "target_norm": exac_result.get("exac_target_norm"),
+            "alpha": exac_result.get("exac_alpha"),
+            "injection_layer": optimal.get("injection_layer"),
+            "vector_norm": exac_result.get("vector_norm"),
+        }
+        for r in exac_result["per_item_non_stereo"]:
+            row = _flatten_result(r, cat, sub, exac_config,
+                                  condition="exacerbation_on_non_stereo")
+            rows.append(row)
+
+    if not rows:
+        return
+
+    df = pd.DataFrame(rows)
+    path = output_dir / "per_item" / f"{cat}_{sub}.parquet"
+    df.to_parquet(path, index=False, compression="snappy")
+
+
+def _flatten_result(
+    r: dict[str, Any],
+    cat: str,
+    sub: str,
+    config: dict[str, Any],
+    condition: str,
+) -> dict[str, Any]:
+    """Flatten a per-item result dict for parquet storage."""
+    row: dict[str, Any] = {
+        "item_idx": r["item_idx"],
+        "category": cat,
+        "subgroup": sub,
+        "condition": condition,
+        "k": config.get("k"),
+        "target_norm": config.get("target_norm"),
+        "alpha": config.get("alpha"),
+        "injection_layer": config.get("injection_layer"),
+        "vector_norm": r.get("vector_norm", config.get("vector_norm")),
+        "baseline_answer": r["baseline_answer"],
+        "steered_answer": r["steered_answer"],
+        "baseline_role": r["baseline_role"],
+        "steered_role": r["steered_role"],
+        "corrected": r["corrected"],
+        "corrupted": r["corrupted"],
+        "degenerated": r["degenerated"],
+        "margin": r["margin"],
+        "margin_bin": r["margin_bin"],
+        "stereotyped_option": r["stereotyped_option"],
+    }
+    # Individual logit columns
+    for letter in ("A", "B", "C"):
+        row[f"logit_baseline_{letter}"] = r["logit_baseline"].get(letter)
+        row[f"logit_steered_{letter}"] = r["logit_steered"].get(letter)
+
+    return row
+
+
+# ---------------------------------------------------------------------------
+# Steering vector saving
+# ---------------------------------------------------------------------------
+
+def save_steering_vector(
+    output_dir: Path,
+    cat: str,
+    sub: str,
+    vec: torch.Tensor,
+    optimal: dict[str, Any],
+    features: list[dict[str, Any]],
+    injection_layer: int,
+) -> None:
+    """Save optimal steering vector as .npz for C2/C3 consumption."""
+    k = optimal["k"]
+    optimal_features = features[:k]
+
+    np.savez(
+        output_dir / "vectors" / f"{cat}_{sub}.npz",
+        vector=vec.float().cpu().numpy(),
+        injection_layer=np.int32(injection_layer),
+        target_norm=np.float32(optimal["target_norm"]),
+        alpha=np.float32(optimal["alpha"]),
+        k=np.int32(k),
+        vector_norm=np.float32(optimal["vector_norm"]),
+        eta=np.float32(optimal["eta"]),
+        rcr_at_optimal=np.float32(optimal["metrics"]["rcr_1.0"]["rcr"]),
+        feature_idxs=np.array(
+            [f["feature_idx"] for f in optimal_features], dtype=np.int32,
+        ),
+        feature_layers=np.array(
+            [f["layer"] for f in optimal_features], dtype=np.int32,
+        ),
+        category=cat,
+        subgroup=sub,
+    )
+    log(f"  Saved steering vector: vectors/{cat}_{sub}.npz")
+
+
+# ---------------------------------------------------------------------------
+# Per-subgroup processing
+# ---------------------------------------------------------------------------
+
+def process_subgroup(
+    cat: str,
+    sub: str,
+    ranked_df: pd.DataFrame,
+    injection_layers: dict[str, Any],
+    metadata_df: pd.DataFrame,
+    wrapper: ModelWrapper,
+    sae_cache: dict[int, SAEWrapper],
+    run_dir: Path,
+    output_dir: Path,
+    config: dict[str, Any],
+    args: argparse.Namespace,
+    target_norms: list[float],
+) -> dict[str, Any]:
+    """Run full C1 pipeline for one subgroup.  Returns manifest dict."""
+    sub_key = f"{cat}/{sub}"
+    log(f"\n{'=' * 60}")
+    log(f"Subgroup: {sub_key}")
+    log(f"{'=' * 60}")
+
+    device = torch.device(config["device"])
+    dtype = getattr(torch, config["dtype"])
+
+    # Initialise manifest
+    manifest: dict[str, Any] = {
+        "subgroup": sub,
+        "category": cat,
+        "steering_viable": False,
+        "steering_skip_reason": None,
+    }
+
+    # Step 0: Get injection layer from B2
+    inj_entry = injection_layers.get(sub_key, {})
+    pro_bias_entry = inj_entry.get("pro_bias") if inj_entry else None
+
+    if pro_bias_entry is None or "injection_layer" not in (pro_bias_entry or {}):
+        manifest["steering_skip_reason"] = "no_significant_features"
+        log(f"  SKIP: no significant pro-bias features")
+        return manifest
+
+    injection_layer = pro_bias_entry["injection_layer"]
+    manifest["injection_layer"] = injection_layer
+
+    # Step 0b: Get top pro-bias features (after artifact filter)
+    pro_bias_features = get_ranked_pro_bias_features(ranked_df, cat, sub)
+
+    if len(pro_bias_features) == 0:
+        manifest["steering_skip_reason"] = "no_features_after_filter"
+        log(f"  SKIP: no features remaining after artifact filter")
+        return manifest
+
+    log(f"  Injection layer: {injection_layer} (from B2 effect-weighted)")
+    log(f"  Pro-bias features after filter: {len(pro_bias_features)}")
+
+    # Step 1: Partition items
+    stimuli = load_stimuli(run_dir, cat)
+    stereo_items, non_stereo_items = partition_items(
+        metadata_df, stimuli, cat, sub,
+    )
+
+    if args.max_items:
+        stereo_items = stereo_items[:args.max_items]
+        non_stereo_items = non_stereo_items[:args.max_items]
+
+    n_stereo = len(stereo_items)
+    n_non_stereo = len(non_stereo_items)
+
+    manifest["n_stereo_items"] = n_stereo
+    manifest["n_non_stereo_items"] = n_non_stereo
+
+    if n_stereo < args.min_n_per_group or n_non_stereo < args.min_n_per_group:
+        manifest["steering_skip_reason"] = (
+            f"insufficient_items (stereo={n_stereo}, non_stereo={n_non_stereo})"
+        )
+        log(f"  SKIP: insufficient items (need ≥{args.min_n_per_group} per group)")
+        return manifest
+
+    log(f"  n_stereo={n_stereo}, n_non_stereo={n_non_stereo}")
+
+    # Ensure SAE for injection layer is loaded
+    if injection_layer not in sae_cache:
+        log(f"  Loading SAE for injection layer {injection_layer}...")
+        sae_cache[injection_layer] = SAEWrapper(
+            config["sae_source"],
+            layer=injection_layer,
+            expansion=config.get("sae_expansion", 32),
+            device=config["device"],
+        )
+
+    steerer = SAESteerer(wrapper, sae_cache[injection_layer], injection_layer)
+
+    # Compute baselines for stereo_items (reused across Phase 1/2)
+    log(f"  Computing baselines for {n_stereo} stereo items...")
+    baselines_stereo = compute_baselines(steerer, stereo_items)
+
+    # Step 2: Phase 1 — target_norm viability at k=1
+    log(f"  Phase 1: target_norm sweep at k=1...")
+    phase1_results = run_phase1(
+        pro_bias_features, sae_cache, baselines_stereo, stereo_items,
+        steerer, target_norms, dtype, output_dir, cat, sub,
+    )
+    manifest["phase1_results"] = phase1_results
+
+    viable_target_norms = identify_viable_target_norms(phase1_results)
+
+    if len(viable_target_norms) < 2:
+        manifest["steering_skip_reason"] = "no_viable_target_norms_in_phase1"
+        log(f"  SKIP: <2 viable target_norms after Phase 1")
+        return manifest
+
+    log(f"  Phase 1: {len(viable_target_norms)}/{len(target_norms)} viable: "
+        f"{viable_target_norms}")
+
+    # Step 3: Phase 2 — joint (k, target_norm) sweep
+    log(f"  Phase 2: joint (k, target_norm) sweep...")
+    k_steps = build_k_steps(len(pro_bias_features))
+
+    phase2_grid = run_phase2(
+        pro_bias_features, sae_cache, baselines_stereo, stereo_items,
+        steerer, k_steps, viable_target_norms, dtype,
+        output_dir, cat, sub, injection_layer,
+    )
+    manifest["phase2_grid"] = phase2_grid
+
+    # Step 4: Phase 3 — select optimal
+    optimal = select_optimal(phase2_grid)
+
+    if optimal is None:
+        manifest["steering_viable"] = False
+        manifest["steering_skip_reason"] = "no_safe_config"
+        log(f"  SKIP: no config with degen<0.05 AND corrupt<0.05")
+        return manifest
+
+    if optimal["metrics"]["rcr_1.0"]["rcr"] <= 0.0:
+        manifest["steering_viable"] = False
+        manifest["steering_skip_reason"] = "rcr_zero"
+        log(f"  WARNING: optimal config has RCR=0; subgroup unsteerable")
+        return manifest
+
+    manifest["steering_viable"] = True
+    manifest["optimal_k"] = optimal["k"]
+    manifest["optimal_target_norm"] = optimal["target_norm"]
+    manifest["optimal_alpha"] = optimal["alpha"]
+    manifest["optimal_vector_norm"] = optimal["vector_norm"]
+    manifest["optimal_eta"] = optimal["eta"]
+    manifest["optimal_rcr_1.0"] = optimal["metrics"]["rcr_1.0"]["rcr"]
+    manifest["optimal_rcr_0.5"] = optimal["metrics"]["rcr_0.5"]["rcr"]
+    manifest["optimal_rcr_2.0"] = optimal["metrics"]["rcr_2.0"]["rcr"]
+    manifest["optimal_mwcs_1.0"] = optimal["metrics"]["mwcs_1.0"]["mwcs"]
+    manifest["optimal_logit_shift"] = optimal["metrics"]["logit_shift"]
+    manifest["optimal_degeneration_rate"] = optimal["degeneration_rate"]
+    manifest["optimal_corruption_rate"] = optimal["corruption_rate"]
+    manifest["optimal_features"] = pro_bias_features[:optimal["k"]]
+
+    log(f"  OPTIMAL: k={optimal['k']} τ={optimal['target_norm']} "
+        f"α={optimal['alpha']:.2f}")
+    log(f"    η={optimal['eta']:.3f} "
+        f"RCR₁.₀={optimal['metrics']['rcr_1.0']['rcr']:.3f} "
+        f"||v||={optimal['vector_norm']:.3f}")
+    log(f"    degen={optimal['degeneration_rate']:.3f} "
+        f"corrupt={optimal['corruption_rate']:.3f}")
+
+    # Step 5: Marginal analysis
+    manifest["marginal_analysis"] = compute_marginal_analysis(
+        phase2_grid, optimal,
+    )
+
+    # Step 6: Save optimal steering vector
+    vec, _ = build_subgroup_steering_vector(
+        pro_bias_features[:optimal["k"]],
+        sae_cache, optimal["alpha"],
+        device=device, dtype=dtype,
+    )
+    save_steering_vector(
+        output_dir, cat, sub, vec, optimal,
+        pro_bias_features, injection_layer,
+    )
+
+    # Step 7: Exacerbation test
+    exac_result = None
+    if not args.skip_exacerbation:
+        log(f"  Step 7: exacerbation test at "
+            f"+|optimal_target_norm|={abs(optimal['target_norm'])}...")
+        exac_result = run_exacerbation_test(
+            optimal, pro_bias_features, sae_cache,
+            steerer, stereo_items, non_stereo_items, baselines_stereo,
+            dtype, output_dir, cat, sub,
+        )
+        manifest["exacerbation"] = exac_result
+
+    # Step 8: Save per-item parquet
+    save_per_item_parquet(output_dir, cat, sub, optimal, exac_result)
+
+    # Placeholders for C3 (filled in later)
+    for key in [
+        "medqa_matched_delta", "medqa_within_cat_mismatched_delta",
+        "medqa_cross_cat_mismatched_delta", "medqa_nodemo_delta",
+        "medqa_exacerbation_matched_delta",
+        "mmlu_delta", "mmlu_worst_subject", "mmlu_worst_subject_delta",
+    ]:
+        manifest[key] = None
+
+    return manifest
+
+
+# ---------------------------------------------------------------------------
+# Top-level output saving
+# ---------------------------------------------------------------------------
+
+def save_top_level_outputs(
+    output_dir: Path,
+    all_manifests: list[dict[str, Any]],
+    all_phase1_results: dict[str, Any],
+    all_grid_records: list[dict[str, Any]],
+    runtime_seconds: float,
+) -> None:
+    """Save all top-level C1 output files."""
+    # steering_manifests.json
+    atomic_save_json(all_manifests, output_dir / "steering_manifests.json")
+    log(f"\nSaved steering_manifests.json ({len(all_manifests)} subgroups)")
+
+    # phase1_results.json
+    atomic_save_json(all_phase1_results, output_dir / "phase1_results.json")
+
+    # optimal_configs.json — nested {cat: {sub: config}}
+    optimal_configs: dict[str, dict[str, Any]] = {}
+    for m in all_manifests:
+        if m.get("steering_viable"):
+            cat = m["category"]
+            sub = m["subgroup"]
+            optimal_configs.setdefault(cat, {})[sub] = {
+                "k": m["optimal_k"],
+                "target_norm": m["optimal_target_norm"],
+                "alpha": m["optimal_alpha"],
+                "injection_layer": m.get("injection_layer"),
+                "eta": m["optimal_eta"],
+                "vector_norm": m["optimal_vector_norm"],
+                "rcr_1.0": m["optimal_rcr_1.0"],
+            }
+    atomic_save_json(optimal_configs, output_dir / "optimal_configs.json")
+
+    # marginal_analysis.json
+    marginal_by_sub: dict[str, Any] = {}
+    for m in all_manifests:
+        if m.get("marginal_analysis"):
+            marginal_by_sub[f"{m['category']}/{m['subgroup']}"] = m["marginal_analysis"]
+    atomic_save_json(marginal_by_sub, output_dir / "marginal_analysis.json")
+
+    # phase2_grid.parquet — flat grid of all Phase 2 configurations
+    if all_grid_records:
+        flat_rows = []
+        for r in all_grid_records:
+            flat_rows.append({
+                "category": r["category"],
+                "subgroup": r["subgroup"],
+                "k": r["k"],
+                "target_norm": r["target_norm"],
+                "alpha": r["alpha"],
+                "injection_layer": r["injection_layer"],
+                "vector_norm": r["vector_norm"],
+                "eta": r["eta"],
+                "rcr_0.5": r["metrics"]["rcr_0.5"]["rcr"],
+                "rcr_1.0": r["metrics"]["rcr_1.0"]["rcr"],
+                "rcr_2.0": r["metrics"]["rcr_2.0"]["rcr"],
+                "mwcs_1.0": r["metrics"]["mwcs_1.0"]["mwcs"],
+                "mean_logit_shift": r["metrics"]["logit_shift"]["mean_shift"],
+                "degeneration_rate": r["degeneration_rate"],
+                "corruption_rate": r["corruption_rate"],
+                "n_items": r["n_items"],
+            })
+        pd.DataFrame(flat_rows).to_parquet(
+            output_dir / "phase2_grid.parquet", index=False, compression="snappy",
+        )
+
+    # c1_summary.json
+    viable = [m for m in all_manifests if m.get("steering_viable")]
+    skip_reasons: dict[str, int] = Counter()
+    for m in all_manifests:
+        reason = m.get("steering_skip_reason")
+        if reason:
+            skip_reasons[reason] += 1
+
+    k_dist: dict[str, int] = Counter()
+    for m in viable:
+        k_dist[str(m["optimal_k"])] += 1
+
+    summary = {
+        "n_subgroups_processed": len(all_manifests),
+        "n_subgroups_viable": len(viable),
+        "n_subgroups_skipped": len(all_manifests) - len(viable),
+        "skip_reasons": dict(skip_reasons),
+        "optimal_k_distribution": dict(k_dist),
+        "median_optimal_k": (
+            float(np.median([m["optimal_k"] for m in viable]))
+            if viable else None
+        ),
+        "median_optimal_eta": (
+            round(float(np.median([m["optimal_eta"] for m in viable])), 4)
+            if viable else None
+        ),
+        "median_optimal_rcr_1.0": (
+            round(float(np.median([m["optimal_rcr_1.0"] for m in viable])), 4)
+            if viable else None
+        ),
+        "runtime_seconds": round(runtime_seconds, 1),
+    }
+    atomic_save_json(summary, output_dir / "c1_summary.json")
+    log(f"Saved c1_summary.json")
+
+    # Print summary
+    log(f"\n{'=' * 60}")
+    log(f"C1 Summary")
+    log(f"{'=' * 60}")
+    log(f"  Viable: {len(viable)}/{len(all_manifests)}")
+    log(f"  Skip reasons: {dict(skip_reasons)}")
+    if viable:
+        log(f"  Median optimal k: {summary['median_optimal_k']}")
+        log(f"  Median η: {summary['median_optimal_eta']}")
+        log(f"  Median RCR₁.₀: {summary['median_optimal_rcr_1.0']}")
+    log(f"  Runtime: {runtime_seconds:.0f}s")
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    args = parse_args()
+    t0 = time.time()
+
+    run_dir = Path(args.run_dir)
+    config = load_config(run_dir)
+
+    device = torch.device(config["device"])
+    dtype = getattr(torch, config["dtype"])
+
+    # Parse target norms
+    if args.target_norms:
+        target_norms = [float(x) for x in args.target_norms.split(",")]
+    else:
+        target_norms = DEFAULT_TARGET_NORMS
+
+    log(f"C1 Steering Optimisation")
+    log(f"  run_dir: {run_dir}")
+    log(f"  device: {device}")
+    log(f"  dtype: {dtype}")
+    log(f"  target_norms: {target_norms}")
+    if args.max_items:
+        log(f"  max_items: {args.max_items}")
+
+    # Load model
+    log("\nLoading model...")
+    wrapper = ModelWrapper.from_pretrained(config["model_path"], device=str(device))
+
+    # Load B2 outputs
+    ranked_df = load_ranked_features(run_dir)
+    injection_layers = load_injection_layers(run_dir)
+
+    # Load B5 artifact flags
+    flagged_set = load_artifact_flags(run_dir)
+    ranked_df = filter_flagged_features(ranked_df, flagged_set)
+
+    # Load metadata
+    metadata_df = load_metadata(run_dir)
+
+    # Determine subgroups to process
+    subgroups_to_process = determine_subgroups(
+        ranked_df, injection_layers,
+        filter_categories=args.categories,
+        filter_subgroups=args.subgroups,
+    )
+
+    # Pre-identify all SAE layers we'll need, load them once
+    needed_layers = identify_needed_layers(ranked_df, subgroups_to_process)
+    sae_cache: dict[int, SAEWrapper] = {}
+    for layer in sorted(needed_layers):
+        log(f"  Loading SAE for layer {layer}...")
+        sae_cache[layer] = SAEWrapper(
+            config["sae_source"],
+            layer=layer,
+            expansion=config.get("sae_expansion", 32),
+            device=str(device),
+        )
+
+    # Output directory structure
+    output_dir = run_dir / "C_steering"
+    ensure_dir(output_dir / "checkpoints")
+    ensure_dir(output_dir / "vectors")
+    ensure_dir(output_dir / "per_item")
+    ensure_dir(output_dir / "figures")
+
+    # Process each subgroup
+    all_manifests: list[dict[str, Any]] = []
+    all_phase1_results: dict[str, Any] = {}
+    all_grid_records: list[dict[str, Any]] = []
+
+    for cat, sub in subgroups_to_process:
+        manifest = process_subgroup(
+            cat=cat, sub=sub,
+            ranked_df=ranked_df,
+            injection_layers=injection_layers,
+            metadata_df=metadata_df,
+            wrapper=wrapper,
+            sae_cache=sae_cache,
+            run_dir=run_dir,
+            output_dir=output_dir,
+            config=config,
+            args=args,
+            target_norms=target_norms,
+        )
+
+        all_manifests.append(manifest)
+        if "phase1_results" in manifest:
+            all_phase1_results[f"{cat}/{sub}"] = manifest.pop("phase1_results")
+        if "phase2_grid" in manifest:
+            all_grid_records.extend(manifest.pop("phase2_grid"))
+
+    # Save top-level outputs
+    runtime = time.time() - t0
+    save_top_level_outputs(
+        output_dir, all_manifests, all_phase1_results,
+        all_grid_records, runtime,
+    )
+
+    # Generate figures
+    if not args.skip_figures:
+        try:
+            from src.visualization.steering_figures import generate_c1_figures
+            generate_c1_figures(output_dir, all_manifests, all_grid_records)
+        except ImportError:
+            log("WARNING: steering_figures module not available; skipping figures")
+        except Exception as e:
+            log(f"WARNING: figure generation failed: {e}")
+
+    log(f"\nC1 complete in {runtime:.1f}s")
+    log(f"  Output: {output_dir}")
+
+
+if __name__ == "__main__":
+    main()

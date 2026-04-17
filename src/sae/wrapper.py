@@ -304,6 +304,15 @@ class SAEWrapper:
             d = d / norm
         return d
 
+    def get_feature_decoder_column(self, feature_idx: int) -> np.ndarray:
+        """Return the raw (unnormalised) decoder column for a single feature.
+
+        Shape ``(hidden_dim,)``.  This is the direction added to the residual
+        stream when the feature fires, scaled by the feature's activation
+        magnitude.  Used for logit-effect decomposition in C4.
+        """
+        return self._W_dec[feature_idx].detach().float().cpu().numpy()
+
     @property
     def n_features(self) -> int:
         return self._n_features
