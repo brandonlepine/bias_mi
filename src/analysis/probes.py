@@ -123,12 +123,10 @@ def train_probe(
             X_train = pca.fit_transform(X[train_idx])
             X_test = pca.transform(X[test_idx])
 
-        n_classes = len(le.classes_)
         clf = LogisticRegression(
             C=LR_C,
             max_iter=LR_MAX_ITER,
             solver="lbfgs",
-            multi_class="multinomial" if n_classes > 2 else "auto",
             class_weight=class_weight,
             random_state=seed,
         )
@@ -198,7 +196,6 @@ def train_probe_stratified(
 
         clf = LogisticRegression(
             C=LR_C, max_iter=LR_MAX_ITER, solver="lbfgs",
-            multi_class="multinomial" if n_classes > 2 else "auto",
             class_weight=class_weight, random_state=seed,
         )
         clf.fit(X_train, y_enc[train_idx])

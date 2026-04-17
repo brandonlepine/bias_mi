@@ -294,7 +294,8 @@ def save_directions(
 
     combined = {**directions_arrays, **directions_norms}
 
-    tmp_path = out_path.with_suffix(".npz.tmp")
+    # np.savez auto-appends .npz if suffix is missing, so use a .npz tmp name
+    tmp_path = out_dir / "_subgroup_directions.tmp.npz"
     np.savez(tmp_path, **combined)
     tmp_path.rename(out_path)
 
