@@ -11,6 +11,33 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+# ---------------------------------------------------------------------------
+# HuggingFace environment — set BEFORE any HF imports
+# ---------------------------------------------------------------------------
+# Default HF_HOME to workspace cache on RunPod (avoids filling root disk).
+# Can be overridden by .env file in project root or by shell environment.
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_ENV_FILE = _PROJECT_ROOT / ".env"
+
+if _ENV_FILE.exists():
+    with open(_ENV_FILE) as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if not _line or _line.startswith("#"):
+                continue
+            if "=" in _line:
+                _key, _, _val = _line.partition("=")
+                _key = _key.strip()
+                _val = _val.strip().strip("'\"")
+                if _key and _val and _key not in os.environ:
+                    os.environ[_key] = _val
+
+# Apply workspace default for HF_HOME if not set and workspace exists
+if "HF_HOME" not in os.environ and Path("/workspace").is_dir():
+    os.environ["HF_HOME"] = "/workspace/.cache/huggingface"
+    Path(os.environ["HF_HOME"]).mkdir(parents=True, exist_ok=True)
+
 import torch
 
 from src.data.bbq_loader import ALL_CATEGORIES

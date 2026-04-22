@@ -628,8 +628,8 @@ def run_b5(
     metadata_df = load_metadata(run_dir)
 
     # Ensure stereotyped_groups deserialized
-    if metadata_df["stereotyped_groups"].dtype == object:
-        first = metadata_df["stereotyped_groups"].iloc[0] if len(metadata_df) else "[]"
+    if len(metadata_df) > 0:
+        first = metadata_df["stereotyped_groups"].iloc[0]
         if isinstance(first, str):
             metadata_df["stereotyped_groups"] = metadata_df["stereotyped_groups"].apply(
                 json.loads

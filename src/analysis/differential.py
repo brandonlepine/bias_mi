@@ -39,8 +39,10 @@ def load_metadata(run_dir: Path) -> pd.DataFrame:
         df = _build_metadata_from_npz(run_dir)
 
     # Deserialize stereotyped_groups from JSON string to list.
-    if df["stereotyped_groups"].dtype == object:
-        first = df["stereotyped_groups"].iloc[0] if len(df) > 0 else "[]"
+    # Parquet may store strings as dtype 'object' (older pandas) or
+    # 'string'/'str' (newer pandas/pyarrow).  Check the first value.
+    if len(df) > 0:
+        first = df["stereotyped_groups"].iloc[0]
         if isinstance(first, str):
             df["stereotyped_groups"] = df["stereotyped_groups"].apply(json.loads)
 
