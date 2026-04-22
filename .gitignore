@@ -60,6 +60,8 @@ src/models/*/
 # reproducibility. For now everything under datasets/ and data/ stays local.
 datasets/
 data/
+# But keep the src/data/ package (Python source, not raw data)
+!src/data/
 
 # --- Run outputs (generated) ---
 results/**
