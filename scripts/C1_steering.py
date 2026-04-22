@@ -888,7 +888,7 @@ def process_subgroup(
     log(f"{'=' * 60}")
 
     device = torch.device(config["device"])
-    dtype = getattr(torch, config["dtype"])
+    dtype = getattr(torch, config.get("dtype", "float16"))
 
     # Initialise manifest
     manifest: dict[str, Any] = {
@@ -1201,7 +1201,7 @@ def main() -> None:
     config = load_config(run_dir)
 
     device = torch.device(config["device"])
-    dtype = getattr(torch, config["dtype"])
+    dtype = getattr(torch, config.get("dtype", "float16"))
 
     # Parse target norms
     if args.target_norms:

@@ -384,7 +384,7 @@ def run_c2(
     )
 
     device = torch.device(config["device"])
-    dtype = getattr(torch, config["dtype"])
+    dtype = getattr(torch, config.get("dtype", "float16"))
 
     # Load viable manifests
     viable_manifests = load_viable_manifests(run_dir, args.categories)
@@ -506,7 +506,7 @@ def run_c3(
     from src.data.mmlu_loader import load_mmlu_items
 
     device = torch.device(config["device"])
-    dtype = getattr(torch, config["dtype"])
+    dtype = getattr(torch, config.get("dtype", "float16"))
 
     # Load vectors
     subgroup_filter = args.c3_subgroups or args.subgroups

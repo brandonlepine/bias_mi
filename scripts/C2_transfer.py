@@ -902,7 +902,7 @@ def main() -> None:
     config = load_config(run_dir)
 
     device = torch.device(config["device"])
-    dtype = getattr(torch, config["dtype"])
+    dtype = getattr(torch, config.get("dtype", "float16"))
 
     log("C2 Cross-Subgroup Transfer & Universal Backfire Prediction")
     log(f"  run_dir: {run_dir}")

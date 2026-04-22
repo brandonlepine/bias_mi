@@ -581,7 +581,7 @@ def main() -> None:
     run_dir = Path(args.run_dir)
     config = load_config(run_dir)
     device = torch.device(config["device"])
-    dtype = getattr(torch, config["dtype"])
+    dtype = getattr(torch, config.get("dtype", "float16"))
 
     log("C4 Token-Level Feature Interpretability")
     log(f"  run_dir: {run_dir}")

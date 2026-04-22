@@ -735,7 +735,7 @@ def main() -> None:
     config = load_config(run_dir)
 
     device = torch.device(config["device"])
-    dtype = getattr(torch, config["dtype"])
+    dtype = getattr(torch, config.get("dtype", "float16"))
 
     log("C3 Generalization Evaluation")
     log(f"  run_dir: {run_dir}")
