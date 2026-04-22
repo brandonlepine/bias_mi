@@ -68,9 +68,9 @@ def device_info() -> dict[str, Any]:
     }
     if torch.cuda.is_available():
         info["cuda_device"] = torch.cuda.get_device_name(0)
-        info["cuda_memory_gb"] = round(
-            torch.cuda.get_device_properties(0).total_mem / (1024**3), 1,
-        )
+        props = torch.cuda.get_device_properties(0)
+        total_mem = getattr(props, "total_memory", None) or getattr(props, "total_mem", 0)
+        info["cuda_memory_gb"] = round(total_mem / (1024**3), 1)
     return info
 
 
