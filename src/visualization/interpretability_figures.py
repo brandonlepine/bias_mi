@@ -126,7 +126,7 @@ def fig_subgroup_specificity_distribution(
 ) -> None:
     """Histogram of subgroup_specificity across all pro-bias features."""
     pro = stats_df[
-        (stats_df["direction"] == "pro_bias")
+        (stats_df["direction"] == "s_marking")
         & stats_df["subgroup_specificity"].notna()
     ]
     if pro.empty:
@@ -206,7 +206,7 @@ def fig_matched_pairs_delta(
 ) -> None:
     """Per-category: feature rank vs mean matched-pairs delta, per subgroup."""
     pro = stats_df[
-        (stats_df["direction"] == "pro_bias")
+        (stats_df["direction"] == "s_marking")
         & stats_df["matched_mean_delta"].notna()
     ]
     if pro.empty:

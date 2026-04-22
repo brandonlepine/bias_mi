@@ -133,7 +133,7 @@ def rank_features_all(
         sub_df = combined_df[
             (combined_df["category"] == cat) & (combined_df["subgroup"] == sub)
         ]
-        for direction in ["pro_bias", "anti_bias"]:
+        for direction in ["s_marking", "other_marking"]:
             dir_df = sub_df[sub_df["direction"] == direction].copy()
             if dir_df.empty:
                 continue
@@ -153,12 +153,12 @@ def rank_features_all(
                     "cohens_d": float(row["cohens_d"]),
                     "p_value_raw": float(row["p_value_raw"]),
                     "p_value_fdr": float(row["p_value_fdr"]),
-                    "firing_rate_stereo": float(row["firing_rate_stereo"]),
-                    "firing_rate_non_stereo": float(row["firing_rate_non_stereo"]),
-                    "mean_activation_stereo": float(row["mean_activation_stereo"]),
-                    "mean_activation_non_stereo": float(row["mean_activation_non_stereo"]),
-                    "n_stereo": int(row["n_stereo"]),
-                    "n_non_stereo": int(row["n_non_stereo"]),
+                    "firing_rate_targeting": float(row["firing_rate_targeting"]),
+                    "firing_rate_not_targeting": float(row["firing_rate_not_targeting"]),
+                    "mean_activation_targeting": float(row["mean_activation_targeting"]),
+                    "mean_activation_not_targeting": float(row["mean_activation_not_targeting"]),
+                    "n_targeting": int(row["n_targeting"]),
+                    "n_not_targeting": int(row["n_not_targeting"]),
                 })
 
     return pd.DataFrame(ranked_rows)
@@ -210,24 +210,24 @@ def build_injection_layers(
         pro = ranked_df[
             (ranked_df["category"] == cat)
             & (ranked_df["subgroup"] == sub)
-            & (ranked_df["direction"] == "pro_bias")
+            & (ranked_df["direction"] == "s_marking")
         ]
         anti = ranked_df[
             (ranked_df["category"] == cat)
             & (ranked_df["subgroup"] == sub)
-            & (ranked_df["direction"] == "anti_bias")
+            & (ranked_df["direction"] == "other_marking")
         ]
 
         record: dict[str, Any] = {
             "category": cat,
             "subgroup": sub,
-            "pro_bias": compute_injection_layer_weighted(pro),
-            "anti_bias": compute_injection_layer_weighted(anti),
+            "s_marking": compute_injection_layer_weighted(pro),
+            "other_marking": compute_injection_layer_weighted(anti),
         }
-        if record["pro_bias"] is None:
-            record["pro_bias_note"] = "No significant pro-bias features"
-        if record["anti_bias"] is None:
-            record["anti_bias_note"] = "No significant anti-bias features"
+        if record["s_marking"] is None:
+            record["s_marking_note"] = "No significant pro-bias features"
+        if record["other_marking"] is None:
+            record["other_marking_note"] = "No significant anti-bias features"
 
         results[key] = record
 
@@ -305,11 +305,11 @@ def compute_all_overlaps(
         overlap_results[cat] = {
             "subgroups": sorted_subs,
             "k_values": k_values,
-            "pro_bias": {},
-            "anti_bias": {},
+            "s_marking": {},
+            "other_marking": {},
         }
 
-        for direction in ["pro_bias", "anti_bias"]:
+        for direction in ["s_marking", "other_marking"]:
             for i, sub_A in enumerate(sorted_subs):
                 for sub_B in sorted_subs[i + 1 :]:
                     pair_key = f"{sub_A}__{sub_B}"
@@ -426,17 +426,17 @@ def build_ranking_summary(
 ) -> dict[str, Any]:
     """Build the top-level ranking_summary.json."""
     n_pro = sum(
-        1 for _, v in injection_layers.items() if v.get("pro_bias") is not None
+        1 for _, v in injection_layers.items() if v.get("s_marking") is not None
     )
     n_anti = sum(
-        1 for _, v in injection_layers.items() if v.get("anti_bias") is not None
+        1 for _, v in injection_layers.items() if v.get("other_marking") is not None
     )
     no_features = [
         make_sub_key(c, s) for c, s in subgroups
         if make_sub_key(c, s) not in injection_layers
         or (
-            injection_layers[make_sub_key(c, s)].get("pro_bias") is None
-            and injection_layers[make_sub_key(c, s)].get("anti_bias") is None
+            injection_layers[make_sub_key(c, s)].get("s_marking") is None
+            and injection_layers[make_sub_key(c, s)].get("other_marking") is None
         )
     ]
 
@@ -451,7 +451,7 @@ def build_ranking_summary(
         n_subs = len(subs)
         n_pro_cat = sum(
             1 for s in subs
-            if injection_layers.get(make_sub_key(cat, s), {}).get("pro_bias") is not None
+            if injection_layers.get(make_sub_key(cat, s), {}).get("s_marking") is not None
         )
 
         pro_counts = []
@@ -461,29 +461,29 @@ def build_ranking_summary(
             key = make_sub_key(cat, s)
             rec = injection_layers.get(key, {})
             pro = cat_ranked[
-                (cat_ranked["subgroup"] == s) & (cat_ranked["direction"] == "pro_bias")
+                (cat_ranked["subgroup"] == s) & (cat_ranked["direction"] == "s_marking")
             ]
             anti = cat_ranked[
-                (cat_ranked["subgroup"] == s) & (cat_ranked["direction"] == "anti_bias")
+                (cat_ranked["subgroup"] == s) & (cat_ranked["direction"] == "other_marking")
             ]
             pro_counts.append(len(pro))
             anti_counts.append(len(anti))
-            if rec.get("pro_bias") and rec["pro_bias"].get("injection_layer") is not None:
-                inj_layers_pro[rec["pro_bias"]["injection_layer"]] += 1
+            if rec.get("s_marking") and rec["s_marking"].get("injection_layer") is not None:
+                inj_layers_pro[rec["s_marking"]["injection_layer"]] += 1
 
         per_cat_summary[cat] = {
             "n_subgroups": n_subs,
-            "n_subgroups_with_pro_bias": n_pro_cat,
-            "mean_n_pro_bias_features": round(float(np.mean(pro_counts)), 0) if pro_counts else 0,
-            "mean_n_anti_bias_features": round(float(np.mean(anti_counts)), 0) if anti_counts else 0,
-            "injection_layer_distribution_pro_bias": dict(sorted(inj_layers_pro.items())),
+            "n_subgroups_with_s_marking": n_pro_cat,
+            "mean_n_s_marking_features": round(float(np.mean(pro_counts)), 0) if pro_counts else 0,
+            "mean_n_other_marking_features": round(float(np.mean(anti_counts)), 0) if anti_counts else 0,
+            "injection_layer_distribution_s_marking": dict(sorted(inj_layers_pro.items())),
         }
 
     return {
         "n_layers_loaded": n_layers,
         "n_subgroups_total": len(subgroups),
-        "n_subgroups_with_pro_bias": n_pro,
-        "n_subgroups_with_anti_bias": n_anti,
+        "n_subgroups_with_s_marking": n_pro,
+        "n_subgroups_with_other_marking": n_anti,
         "n_subgroups_no_features": len(no_features),
         "subgroups_no_features": no_features,
         "k_values_used": k_values,

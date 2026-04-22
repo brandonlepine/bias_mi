@@ -245,7 +245,7 @@ def run_c1(
         compute_marginal_analysis,
         determine_subgroups,
         filter_flagged_features,
-        get_ranked_pro_bias_features,
+        get_ranked_s_marking_features,
         identify_needed_layers,
         identify_viable_target_norms,
         load_artifact_flags,

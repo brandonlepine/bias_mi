@@ -325,7 +325,7 @@ def build_cross_subgroup_matrix(
     """Build feature × subgroup activation matrix, cluster, compute ARI + BDS."""
     cat_features = top_features[
         (top_features["category"] == category)
-        & (top_features["direction"] == "pro_bias")
+        & (top_features["direction"] == "s_marking")
     ].copy()
 
     if cat_features.empty:
@@ -531,7 +531,7 @@ def compute_feature_cooccurrence(
     sub_features = top_features[
         (top_features["category"] == category)
         & (top_features["subgroup"] == subgroup)
-        & (top_features["direction"] == "pro_bias")
+        & (top_features["direction"] == "s_marking")
         & (top_features["rank"] <= top_n_cooccur)
     ].sort_values("rank")
 

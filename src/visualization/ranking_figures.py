@@ -61,7 +61,7 @@ def fig_feature_overlap(
         if n < 2:
             continue
 
-        for direction in ["pro_bias", "anti_bias"]:
+        for direction in ["s_marking", "other_marking"]:
             pairs = cat_data.get(direction, {})
             if not pairs:
                 continue
@@ -129,7 +129,7 @@ def fig_overlap_curves(
             continue
 
         fig, axes = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
-        for ax_idx, direction in enumerate(["pro_bias", "anti_bias"]):
+        for ax_idx, direction in enumerate(["s_marking", "other_marking"]):
             ax = axes[ax_idx]
             pairs = cat_data.get(direction, {})
 
@@ -181,7 +181,7 @@ def fig_ranked_effect_sizes(
 
     for cat, subs in sorted(by_cat.items()):
         fig, axes = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
-        for ax_idx, direction in enumerate(["pro_bias", "anti_bias"]):
+        for ax_idx, direction in enumerate(["s_marking", "other_marking"]):
             ax = axes[ax_idx]
             for s_idx, sub in enumerate(sorted(subs)):
                 df = ranked_df[
@@ -228,12 +228,12 @@ def fig_feature_count_per_subgroup(
         n_pro = len(ranked_df[
             (ranked_df["category"] == cat)
             & (ranked_df["subgroup"] == sub)
-            & (ranked_df["direction"] == "pro_bias")
+            & (ranked_df["direction"] == "s_marking")
         ])
         n_anti = len(ranked_df[
             (ranked_df["category"] == cat)
             & (ranked_df["subgroup"] == sub)
-            & (ranked_df["direction"] == "anti_bias")
+            & (ranked_df["direction"] == "other_marking")
         ])
         labels.append(key)
         pro_counts.append(n_pro)
@@ -243,9 +243,9 @@ def fig_feature_count_per_subgroup(
     width = 0.35
 
     fig, ax = plt.subplots(figsize=(max(10, len(labels) * 0.6), 6))
-    ax.bar(x - width / 2, pro_counts, width, label="pro-bias",
+    ax.bar(x - width / 2, pro_counts, width, label="s-marking",
            color=WONG["blue"])
-    ax.bar(x + width / 2, anti_counts, width, label="anti-bias",
+    ax.bar(x + width / 2, anti_counts, width, label="other-marking",
            color=WONG["orange"])
 
     ax.set_xticks(x)
@@ -270,16 +270,16 @@ def fig_injection_layer_distribution(
     pro_layers: list[int] = []
     anti_layers: list[int] = []
     for rec in injection_layers.values():
-        if rec.get("pro_bias") and rec["pro_bias"].get("injection_layer") is not None:
-            pro_layers.append(rec["pro_bias"]["injection_layer"])
-        if rec.get("anti_bias") and rec["anti_bias"].get("injection_layer") is not None:
-            anti_layers.append(rec["anti_bias"]["injection_layer"])
+        if rec.get("s_marking") and rec["s_marking"].get("injection_layer") is not None:
+            pro_layers.append(rec["s_marking"]["injection_layer"])
+        if rec.get("other_marking") and rec["other_marking"].get("injection_layer") is not None:
+            anti_layers.append(rec["other_marking"]["injection_layer"])
 
     bins = np.arange(-0.5, n_layers + 0.5, 1)
     fig, ax = plt.subplots(figsize=(10, 5))
-    ax.hist(pro_layers, bins=bins, alpha=0.7, label="pro-bias",
+    ax.hist(pro_layers, bins=bins, alpha=0.7, label="s-marking",
             color=WONG["blue"])
-    ax.hist(anti_layers, bins=bins, alpha=0.7, label="anti-bias",
+    ax.hist(anti_layers, bins=bins, alpha=0.7, label="other-marking",
             color=WONG["orange"])
     ax.set_xlabel("Layer")
     ax.set_ylabel("# subgroups")

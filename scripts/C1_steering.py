@@ -196,14 +196,14 @@ def load_stimuli(run_dir: Path, category: str) -> list[dict[str, Any]]:
     return data
 
 
-def get_ranked_pro_bias_features(
+def get_ranked_s_marking_features(
     df: pd.DataFrame, category: str, subgroup: str,
 ) -> list[dict[str, Any]]:
     """Get ranked pro-bias features for a subgroup as list of dicts."""
     sub_df = df[
         (df["category"] == category)
         & (df["subgroup"] == subgroup)
-        & (df["direction"] == "pro_bias")
+        & (df["direction"] == "s_marking")
     ].sort_values("rank")
 
     features = []
@@ -234,10 +234,10 @@ def determine_subgroups(
         if "/" not in key:
             continue
         cat, sub = key.split("/", 1)
-        pro_bias = entry.get("pro_bias")
-        if pro_bias is None:
+        s_marking = entry.get("s_marking")
+        if s_marking is None:
             continue
-        if "injection_layer" not in pro_bias:
+        if "injection_layer" not in s_marking:
             continue
         all_pairs.add((cat, sub))
 
@@ -267,7 +267,7 @@ def identify_needed_layers(
         sub_df = ranked_df[
             (ranked_df["category"] == cat)
             & (ranked_df["subgroup"] == sub)
-            & (ranked_df["direction"] == "pro_bias")
+            & (ranked_df["direction"] == "s_marking")
         ].sort_values("rank").head(max_k)
         for _, row in sub_df.iterrows():
             needed.add(int(row["layer"]))
@@ -377,7 +377,7 @@ def config_ckpt_name(cat: str, sub: str, k: int, target_norm: float) -> str:
 # ---------------------------------------------------------------------------
 
 def run_phase1(
-    pro_bias_features: list[dict[str, Any]],
+    s_marking_features: list[dict[str, Any]],
     sae_cache: dict[int, SAEWrapper],
     baselines: list[dict[str, Any]],
     stereo_items: list[dict[str, Any]],
@@ -404,7 +404,7 @@ def run_phase1(
         return loaded
 
     # Compute mean_dir_norm at k=1
-    top_1 = pro_bias_features[:1]
+    top_1 = s_marking_features[:1]
     _, mean_norm_k1 = build_subgroup_steering_vector(
         top_1, sae_cache, alpha=1.0,
         device=torch.device(steerer.device), dtype=dtype,
@@ -473,7 +473,7 @@ def build_k_steps(n_features: int) -> list[int]:
 
 
 def run_phase2(
-    pro_bias_features: list[dict[str, Any]],
+    s_marking_features: list[dict[str, Any]],
     sae_cache: dict[int, SAEWrapper],
     baselines: list[dict[str, Any]],
     stereo_items: list[dict[str, Any]],
@@ -492,7 +492,7 @@ def run_phase2(
     device = torch.device(steerer.device)
 
     for k in k_steps:
-        top_k = pro_bias_features[:k]
+        top_k = s_marking_features[:k]
         # Compute mean_dir_norm for this k
         _, mean_norm_k = build_subgroup_steering_vector(
             top_k, sae_cache, alpha=1.0, device=device, dtype=dtype,
@@ -632,7 +632,7 @@ def compute_marginal_analysis(
 
 def run_exacerbation_test(
     optimal: dict[str, Any],
-    pro_bias_features: list[dict[str, Any]],
+    s_marking_features: list[dict[str, Any]],
     sae_cache: dict[int, SAEWrapper],
     steerer: SAESteerer,
     stereo_items: list[dict[str, Any]],
@@ -658,7 +658,7 @@ def run_exacerbation_test(
     k = optimal["k"]
     device = torch.device(steerer.device)
 
-    top_k = pro_bias_features[:k]
+    top_k = s_marking_features[:k]
     _, mean_norm = build_subgroup_steering_vector(
         top_k, sae_cache, alpha=1.0, device=device, dtype=dtype,
     )
@@ -900,26 +900,26 @@ def process_subgroup(
 
     # Step 0: Get injection layer from B2
     inj_entry = injection_layers.get(sub_key, {})
-    pro_bias_entry = inj_entry.get("pro_bias") if inj_entry else None
+    s_marking_entry = inj_entry.get("s_marking") if inj_entry else None
 
-    if pro_bias_entry is None or "injection_layer" not in (pro_bias_entry or {}):
+    if s_marking_entry is None or "injection_layer" not in (s_marking_entry or {}):
         manifest["steering_skip_reason"] = "no_significant_features"
         log(f"  SKIP: no significant pro-bias features")
         return manifest
 
-    injection_layer = pro_bias_entry["injection_layer"]
+    injection_layer = s_marking_entry["injection_layer"]
     manifest["injection_layer"] = injection_layer
 
     # Step 0b: Get top pro-bias features (after artifact filter)
-    pro_bias_features = get_ranked_pro_bias_features(ranked_df, cat, sub)
+    s_marking_features = get_ranked_s_marking_features(ranked_df, cat, sub)
 
-    if len(pro_bias_features) == 0:
+    if len(s_marking_features) == 0:
         manifest["steering_skip_reason"] = "no_features_after_filter"
         log(f"  SKIP: no features remaining after artifact filter")
         return manifest
 
     log(f"  Injection layer: {injection_layer} (from B2 effect-weighted)")
-    log(f"  Pro-bias features after filter: {len(pro_bias_features)}")
+    log(f"  Pro-bias features after filter: {len(s_marking_features)}")
 
     # Step 1: Partition items
     stimuli = load_stimuli(run_dir, cat)
@@ -965,7 +965,7 @@ def process_subgroup(
     # Step 2: Phase 1 — target_norm viability at k=1
     log(f"  Phase 1: target_norm sweep at k=1...")
     phase1_results = run_phase1(
-        pro_bias_features, sae_cache, baselines_stereo, stereo_items,
+        s_marking_features, sae_cache, baselines_stereo, stereo_items,
         steerer, target_norms, dtype, output_dir, cat, sub,
     )
     manifest["phase1_results"] = phase1_results
@@ -982,10 +982,10 @@ def process_subgroup(
 
     # Step 3: Phase 2 — joint (k, target_norm) sweep
     log(f"  Phase 2: joint (k, target_norm) sweep...")
-    k_steps = build_k_steps(len(pro_bias_features))
+    k_steps = build_k_steps(len(s_marking_features))
 
     phase2_grid = run_phase2(
-        pro_bias_features, sae_cache, baselines_stereo, stereo_items,
+        s_marking_features, sae_cache, baselines_stereo, stereo_items,
         steerer, k_steps, viable_target_norms, dtype,
         output_dir, cat, sub, injection_layer,
     )
@@ -1019,7 +1019,7 @@ def process_subgroup(
     manifest["optimal_logit_shift"] = optimal["metrics"]["logit_shift"]
     manifest["optimal_degeneration_rate"] = optimal["degeneration_rate"]
     manifest["optimal_corruption_rate"] = optimal["corruption_rate"]
-    manifest["optimal_features"] = pro_bias_features[:optimal["k"]]
+    manifest["optimal_features"] = s_marking_features[:optimal["k"]]
 
     log(f"  OPTIMAL: k={optimal['k']} τ={optimal['target_norm']} "
         f"α={optimal['alpha']:.2f}")
@@ -1036,13 +1036,13 @@ def process_subgroup(
 
     # Step 6: Save optimal steering vector
     vec, _ = build_subgroup_steering_vector(
-        pro_bias_features[:optimal["k"]],
+        s_marking_features[:optimal["k"]],
         sae_cache, optimal["alpha"],
         device=device, dtype=dtype,
     )
     save_steering_vector(
         output_dir, cat, sub, vec, optimal,
-        pro_bias_features, injection_layer,
+        s_marking_features, injection_layer,
     )
 
     # Step 7: Exacerbation test
@@ -1051,7 +1051,7 @@ def process_subgroup(
         log(f"  Step 7: exacerbation test at "
             f"+|optimal_target_norm|={abs(optimal['target_norm'])}...")
         exac_result = run_exacerbation_test(
-            optimal, pro_bias_features, sae_cache,
+            optimal, s_marking_features, sae_cache,
             steerer, stereo_items, non_stereo_items, baselines_stereo,
             dtype, output_dir, cat, sub,
         )

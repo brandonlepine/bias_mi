@@ -1,8 +1,11 @@
 """B1 core: differential SAE feature analysis per subgroup per layer.
 
-Identifies SAE features that activate differently when the model produces
-a stereotyped response vs. when it doesn't.  Uses Mann-Whitney U tests with
-BH FDR correction, vectorized across features via sparse matrices.
+Question B (identity-based): for each subgroup S, contrast items targeting S
+against items targeting OTHER subgroups in the same category.  Identifies
+"identity-marking" features that encode the presence of S-related content.
+
+Uses Mann-Whitney U tests with BH FDR correction, vectorised across features
+via sparse matrices.
 """
 
 from __future__ import annotations
@@ -39,8 +42,7 @@ def load_metadata(run_dir: Path) -> pd.DataFrame:
         df = _build_metadata_from_npz(run_dir)
 
     # Deserialize stereotyped_groups from JSON string to list.
-    # Parquet may store strings as dtype 'object' (older pandas) or
-    # 'string'/'str' (newer pandas/pyarrow).  Check the first value.
+    # Handles both 'object' dtype (older pandas) and 'string'/'str' (newer).
     if len(df) > 0:
         first = df["stereotyped_groups"].iloc[0]
         if isinstance(first, str):
@@ -74,7 +76,7 @@ def _build_metadata_from_npz(run_dir: Path) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# Step 0b: Subgroup catalog
+# Step 0b: Subgroup catalog (Question B)
 # ---------------------------------------------------------------------------
 
 def build_subgroup_catalog(
@@ -82,11 +84,11 @@ def build_subgroup_catalog(
     categories: list[str],
     min_n: int,
 ) -> dict[str, dict[str, Any]]:
-    """Build catalog of analyzable subgroups.
+    """Build catalog of analysable subgroups under Question B.
 
-    A subgroup is analyzable if it has ``>= min_n`` items in **both** the
-    stereotyped-response group and the non-stereotyped-response group
-    (ambig items only).
+    A subgroup is analysable if it has ``>= min_n`` items in **both**
+    Group A (targeting S) and Group B (targeting other subgroups in same
+    category), among ambig items.
     """
     catalog: dict[str, dict[str, Any]] = {}
 
@@ -99,28 +101,31 @@ def build_subgroup_catalog(
             all_subs.update(gs)
 
         for sub in sorted(all_subs):
-            targeting = ambig[ambig["stereotyped_groups"].apply(lambda gs: sub in gs)]
-            n_stereo = int(
-                (targeting["model_answer_role"] == "stereotyped_target").sum()
+            # Group A: items targeting S
+            group_a = ambig[ambig["stereotyped_groups"].apply(lambda gs: sub in gs)]
+            n_targeting = int(len(group_a))
+
+            # Group B: items targeting OTHER subgroups in same category
+            group_b = ambig[ambig["stereotyped_groups"].apply(
+                lambda gs: (sub not in gs) and (len(gs) > 0)
+            )]
+            n_not_targeting = int(len(group_b))
+
+            # Supplementary: behavioural counts within Group A
+            n_stereo_response = int(
+                (group_a["model_answer_role"] == "stereotyped_target").sum()
             )
-            n_non_stereo = int(
-                (targeting["model_answer_role"] != "stereotyped_target").sum()
-            )
-            n_unknown = int(
-                (targeting["model_answer_role"] == "unknown").sum()
-            )
-            n_non_stereo_strict = int(
-                (targeting["model_answer_role"] == "non_stereotyped").sum()
+            n_non_stereo_response = int(
+                (group_a["model_answer_role"] != "stereotyped_target").sum()
             )
 
             catalog[sub] = {
                 "category": cat,
-                "n_stereo": n_stereo,
-                "n_non_stereo": n_non_stereo,
-                "n_non_stereo_strict": n_non_stereo_strict,
-                "n_unknown_in_non_stereo_group": n_unknown,
-                "total_ambig": int(len(targeting)),
-                "analyzable": n_stereo >= min_n and n_non_stereo >= min_n,
+                "n_targeting": n_targeting,
+                "n_not_targeting": n_not_targeting,
+                "n_stereo_response_in_group_a": n_stereo_response,
+                "n_non_stereo_response_in_group_a": n_non_stereo_response,
+                "analyzable": n_targeting >= min_n and n_not_targeting >= min_n,
             }
 
     # Cross-category name uniqueness check.
@@ -139,14 +144,14 @@ def build_subgroup_catalog(
         for sub, entry in sorted(catalog.items()):
             if not entry["analyzable"]:
                 log(f"  {entry['category']}/{sub}: "
-                    f"n_stereo={entry['n_stereo']}, "
-                    f"n_non_stereo={entry['n_non_stereo']}")
+                    f"n_targeting={entry['n_targeting']}, "
+                    f"n_not_targeting={entry['n_not_targeting']}")
 
     return catalog
 
 
 # ---------------------------------------------------------------------------
-# Step 1: Comparison groups
+# Step 1: Comparison groups (Question B — identity-based)
 # ---------------------------------------------------------------------------
 
 def get_comparison_groups(
@@ -154,21 +159,26 @@ def get_comparison_groups(
     category: str,
     subgroup: str,
 ) -> tuple[list[int], list[int]]:
-    """Return ``(stereo_item_idxs, non_stereo_item_idxs)`` for one subgroup.
+    """Return ``(targeting_idxs, not_targeting_idxs)`` for one subgroup.
 
-    Both lists contain ``item_idx`` values for ambig items targeting the
-    subgroup.  The non-stereotyped group includes both "unknown" and
-    "non_stereotyped" model answers (everything that isn't the biased answer).
+    Question B: items targeting S vs items targeting other subgroups in
+    the same category.  Both groups are ambig items only.
     """
     cat_df = meta_df[meta_df["category"] == category]
-    targeting = cat_df[
-        cat_df["stereotyped_groups"].apply(lambda gs: subgroup in gs)
-        & (cat_df["context_condition"] == "ambig")
-    ]
-    stereo_mask = targeting["model_answer_role"] == "stereotyped_target"
-    stereo_idxs = targeting.loc[stereo_mask, "item_idx"].tolist()
-    non_stereo_idxs = targeting.loc[~stereo_mask, "item_idx"].tolist()
-    return stereo_idxs, non_stereo_idxs
+    ambig = cat_df[cat_df["context_condition"] == "ambig"]
+
+    # Group A: targeting S
+    group_a_mask = ambig["stereotyped_groups"].apply(lambda gs: subgroup in gs)
+
+    # Group B: not targeting S but targeting something else in same category
+    group_b_mask = ambig["stereotyped_groups"].apply(
+        lambda gs: (subgroup not in gs) and (len(gs) > 0)
+    )
+
+    targeting_idxs = ambig.loc[group_a_mask, "item_idx"].tolist()
+    not_targeting_idxs = ambig.loc[group_b_mask, "item_idx"].tolist()
+
+    return targeting_idxs, not_targeting_idxs
 
 
 # ---------------------------------------------------------------------------
@@ -206,69 +216,81 @@ def build_sparse_matrix(
 
 
 # ---------------------------------------------------------------------------
-# Step 3: Vectorized statistical tests
+# Step 3: Vectorised statistical tests
 # ---------------------------------------------------------------------------
 
 def test_subgroup_vectorized(
     matrix: csr_matrix,
     item_idx_to_row: dict[int, int],
     active_features: np.ndarray,
-    stereo_idxs: list[int],
-    non_stereo_idxs: list[int],
+    targeting_idxs: list[int],
+    not_targeting_idxs: list[int],
 ) -> pd.DataFrame | None:
-    """Run vectorized differential tests for all active features for one subgroup."""
-    stereo_rows = [item_idx_to_row[i] for i in stereo_idxs if i in item_idx_to_row]
-    non_stereo_rows = [item_idx_to_row[i] for i in non_stereo_idxs if i in item_idx_to_row]
+    """Run vectorised differential tests for all active features for one subgroup.
 
-    if len(stereo_rows) == 0 or len(non_stereo_rows) == 0:
+    Question B: targeting S vs not targeting S in same category.
+    """
+    targeting_rows = [
+        item_idx_to_row[i] for i in targeting_idxs if i in item_idx_to_row
+    ]
+    not_targeting_rows = [
+        item_idx_to_row[i] for i in not_targeting_idxs if i in item_idx_to_row
+    ]
+
+    if len(targeting_rows) == 0 or len(not_targeting_rows) == 0:
         return None
 
-    stereo_mat = matrix[stereo_rows, :].toarray()
-    non_stereo_mat = matrix[non_stereo_rows, :].toarray()
+    targeting_mat = matrix[targeting_rows, :].toarray()
+    not_targeting_mat = matrix[not_targeting_rows, :].toarray()
 
-    n_s = len(stereo_rows)
-    n_ns = len(non_stereo_rows)
+    n_t = len(targeting_rows)
+    n_nt = len(not_targeting_rows)
 
-    # Vectorized Cohen's d.
-    mean_s = stereo_mat.mean(axis=0)
-    mean_ns = non_stereo_mat.mean(axis=0)
-    var_s = stereo_mat.var(axis=0, ddof=1) if n_s > 1 else np.zeros_like(mean_s)
-    var_ns = non_stereo_mat.var(axis=0, ddof=1) if n_ns > 1 else np.zeros_like(mean_ns)
+    # Vectorised Cohen's d.
+    mean_t = targeting_mat.mean(axis=0)
+    mean_nt = not_targeting_mat.mean(axis=0)
+    var_t = targeting_mat.var(axis=0, ddof=1) if n_t > 1 else np.zeros_like(mean_t)
+    var_nt = (
+        not_targeting_mat.var(axis=0, ddof=1)
+        if n_nt > 1 else np.zeros_like(mean_nt)
+    )
 
     pooled_var = (
-        (n_s - 1) * var_s + (n_ns - 1) * var_ns
-    ) / max(n_s + n_ns - 2, 1)
+        (n_t - 1) * var_t + (n_nt - 1) * var_nt
+    ) / max(n_t + n_nt - 2, 1)
     pooled_std = np.sqrt(np.maximum(pooled_var, 1e-12))
-    cohens_d = (mean_s - mean_ns) / pooled_std
+    cohens_d = (mean_t - mean_nt) / pooled_std
 
-    # Vectorized firing rates.
-    firing_s = (stereo_mat > 0).mean(axis=0)
-    firing_ns = (non_stereo_mat > 0).mean(axis=0)
+    # Vectorised firing rates.
+    firing_t = (targeting_mat > 0).mean(axis=0)
+    firing_nt = (not_targeting_mat > 0).mean(axis=0)
 
     # Firing rate filter.
-    max_firing = np.maximum(firing_s, firing_ns)
-    combined_nonzero = (stereo_mat > 0).sum(axis=0) + (non_stereo_mat > 0).sum(axis=0)
+    max_firing = np.maximum(firing_t, firing_nt)
+    combined_nonzero = (
+        (targeting_mat > 0).sum(axis=0) + (not_targeting_mat > 0).sum(axis=0)
+    )
     passes_filter = (max_firing >= 0.05) | (combined_nonzero >= 10)
 
-    # Vectorized Mann-Whitney U.
+    # Vectorised Mann-Whitney U.
     pvalues = np.ones(len(active_features), dtype=np.float64)
 
     if passes_filter.any():
-        filtered_s = stereo_mat[:, passes_filter]
-        filtered_ns = non_stereo_mat[:, passes_filter]
+        filtered_t = targeting_mat[:, passes_filter]
+        filtered_nt = not_targeting_mat[:, passes_filter]
         try:
             _, pvals_filtered = mannwhitneyu(
-                filtered_s, filtered_ns,
+                filtered_t, filtered_nt,
                 alternative="two-sided", axis=0, nan_policy="omit",
             )
             pvalues[passes_filter] = pvals_filtered
         except (ValueError, TypeError) as e:
-            log(f"    Vectorized Mann-Whitney failed ({e}), falling back to loop")
+            log(f"    Vectorised Mann-Whitney failed ({e}), falling back to loop")
             idx_passing = np.where(passes_filter)[0]
             for j in idx_passing:
                 try:
                     _, p = mannwhitneyu(
-                        stereo_mat[:, j], non_stereo_mat[:, j],
+                        targeting_mat[:, j], not_targeting_mat[:, j],
                         alternative="two-sided",
                     )
                     pvalues[j] = p
@@ -279,14 +301,14 @@ def test_subgroup_vectorized(
         "feature_idx": active_features.astype(np.int32),
         "cohens_d": cohens_d.astype(np.float32),
         "p_value_raw": pvalues,
-        "firing_rate_stereo": firing_s.astype(np.float32),
-        "firing_rate_non_stereo": firing_ns.astype(np.float32),
-        "mean_activation_stereo": mean_s.astype(np.float32),
-        "mean_activation_non_stereo": mean_ns.astype(np.float32),
+        "firing_rate_targeting": firing_t.astype(np.float32),
+        "firing_rate_not_targeting": firing_nt.astype(np.float32),
+        "mean_activation_targeting": mean_t.astype(np.float32),
+        "mean_activation_not_targeting": mean_nt.astype(np.float32),
         "passes_firing_filter": passes_filter,
     })
-    result["n_stereo"] = np.int32(n_s)
-    result["n_non_stereo"] = np.int32(n_ns)
+    result["n_targeting"] = np.int32(n_t)
+    result["n_not_targeting"] = np.int32(n_nt)
 
     return result
 
@@ -296,7 +318,12 @@ def test_subgroup_vectorized(
 # ---------------------------------------------------------------------------
 
 def apply_fdr(result_df: pd.DataFrame, alpha: float = 0.05) -> pd.DataFrame:
-    """Apply Benjamini-Hochberg FDR correction to features passing firing filter."""
+    """Apply Benjamini-Hochberg FDR correction to features passing firing filter.
+
+    Direction labels under Question B:
+        cohens_d > 0 → ``s_marking`` (fires more on items targeting S)
+        cohens_d < 0 → ``other_marking`` (fires more on items NOT targeting S)
+    """
     result_df = result_df.copy()
     result_df["p_value_fdr"] = 1.0
     result_df["is_significant"] = False
@@ -311,7 +338,7 @@ def apply_fdr(result_df: pd.DataFrame, alpha: float = 0.05) -> pd.DataFrame:
         result_df.loc[mask, "is_significant"] = rejected
 
     result_df["direction"] = np.where(
-        result_df["cohens_d"] > 0, "pro_bias", "anti_bias",
+        result_df["cohens_d"] > 0, "s_marking", "other_marking",
     )
     return result_df
 
@@ -329,7 +356,7 @@ def process_layer(
     min_n: int,
     max_items: int | None,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
-    """Process one layer: test all subgroups in all categories.
+    """Process one layer: test all subgroups in all categories (Question B).
 
     Returns ``(combined_df, layer_summary)``.
     """
@@ -381,18 +408,20 @@ def process_layer(
             if entry["category"] != cat or not entry["analyzable"]:
                 continue
 
-            stereo_idxs, non_stereo_idxs = get_comparison_groups(
+            targeting_idxs, not_targeting_idxs = get_comparison_groups(
                 meta_df, cat, sub,
             )
-            stereo_idxs = [i for i in stereo_idxs if i in item_idx_to_row]
-            non_stereo_idxs = [i for i in non_stereo_idxs if i in item_idx_to_row]
+            targeting_idxs = [i for i in targeting_idxs if i in item_idx_to_row]
+            not_targeting_idxs = [
+                i for i in not_targeting_idxs if i in item_idx_to_row
+            ]
 
-            if len(stereo_idxs) < min_n or len(non_stereo_idxs) < min_n:
+            if len(targeting_idxs) < min_n or len(not_targeting_idxs) < min_n:
                 continue
 
             result = test_subgroup_vectorized(
                 matrix, item_idx_to_row, active_features,
-                stereo_idxs, non_stereo_idxs,
+                targeting_idxs, not_targeting_idxs,
             )
             if result is None:
                 continue
@@ -408,31 +437,37 @@ def process_layer(
             result["category"] = cat
 
             n_sig = int(result["is_significant"].sum())
-            n_pro = int(
-                (result["is_significant"] & (result["direction"] == "pro_bias")).sum()
+            n_s_marking = int(
+                (result["is_significant"]
+                 & (result["direction"] == "s_marking")).sum()
             )
-            n_anti = int(
-                (result["is_significant"] & (result["direction"] == "anti_bias")).sum()
+            n_other_marking = int(
+                (result["is_significant"]
+                 & (result["direction"] == "other_marking")).sum()
             )
 
             layer_summary["per_subgroup"][sub] = {
                 "category": cat,
-                "n_stereo": int(result["n_stereo"].iloc[0]),
-                "n_non_stereo": int(result["n_non_stereo"].iloc[0]),
+                "n_targeting": int(result["n_targeting"].iloc[0]),
+                "n_not_targeting": int(result["n_not_targeting"].iloc[0]),
                 "n_features_tested": len(result),
                 "n_significant": n_sig,
-                "n_significant_pro_bias": n_pro,
-                "n_significant_anti_bias": n_anti,
+                "n_significant_s_marking": n_s_marking,
+                "n_significant_other_marking": n_other_marking,
             }
 
-            log(f"    {sub}: n_stereo={result['n_stereo'].iloc[0]}, "
-                f"n_non_stereo={result['n_non_stereo'].iloc[0]}, "
+            log(f"    {sub}: n_targeting={result['n_targeting'].iloc[0]}, "
+                f"n_not_targeting={result['n_not_targeting'].iloc[0]}, "
                 f"n_tested={len(result)}, "
-                f"n_sig={n_sig} (pro={n_pro}, anti={n_anti})")
+                f"n_sig={n_sig} (s_marking={n_s_marking}, "
+                f"other_marking={n_other_marking})")
 
             all_results.append(result)
 
-    combined = pd.concat(all_results, ignore_index=True) if all_results else pd.DataFrame()
+    combined = (
+        pd.concat(all_results, ignore_index=True)
+        if all_results else pd.DataFrame()
+    )
 
     elapsed = time.time() - t0
     log(f"  Layer {layer:02d} complete in {elapsed:.1f}s")
@@ -457,13 +492,12 @@ def save_layer_parquet(run_dir: Path, layer: int, df: pd.DataFrame) -> None:
         log(f"  WARNING: empty results for layer {layer}, skipping write")
         return
 
-    # Drop internal helper column before saving.
     save_cols = [
         "feature_idx", "layer", "subgroup", "category",
         "cohens_d", "p_value_raw", "p_value_fdr", "is_significant", "direction",
-        "firing_rate_stereo", "firing_rate_non_stereo",
-        "mean_activation_stereo", "mean_activation_non_stereo",
-        "n_stereo", "n_non_stereo",
+        "firing_rate_targeting", "firing_rate_not_targeting",
+        "mean_activation_targeting", "mean_activation_not_targeting",
+        "n_targeting", "n_not_targeting",
     ]
     save_df = df[[c for c in save_cols if c in df.columns]]
 
@@ -504,7 +538,6 @@ def build_differential_summary(
     min_n: int = 10,
 ) -> None:
     """Build differential_summary.json from per-layer results."""
-    # Per-subgroup aggregation across layers.
     per_subgroup_results: dict[str, dict[str, Any]] = {}
     total_significant = 0
     total_time = 0.0
@@ -513,8 +546,8 @@ def build_differential_summary(
         if not entry["analyzable"]:
             continue
         n_sig_by_layer: dict[str, int] = {}
-        total_pro = 0
-        total_anti = 0
+        total_s_marking = 0
+        total_other_marking = 0
         total_sig = 0
 
         for layer in layers:
@@ -522,18 +555,21 @@ def build_differential_summary(
             ps = ls.get("per_subgroup", {}).get(sub, {})
             n_sig = ps.get("n_significant", 0)
             n_sig_by_layer[str(layer)] = n_sig
-            total_pro += ps.get("n_significant_pro_bias", 0)
-            total_anti += ps.get("n_significant_anti_bias", 0)
+            total_s_marking += ps.get("n_significant_s_marking", 0)
+            total_other_marking += ps.get("n_significant_other_marking", 0)
             total_sig += n_sig
 
-        peak_layer = max(n_sig_by_layer, key=n_sig_by_layer.get) if n_sig_by_layer else "0"
+        peak_layer = (
+            max(n_sig_by_layer, key=n_sig_by_layer.get)
+            if n_sig_by_layer else "0"
+        )
         per_subgroup_results[sub] = {
             "category": entry["category"],
             "n_significant_by_layer": n_sig_by_layer,
             "peak_layer": int(peak_layer),
             "peak_n_significant": n_sig_by_layer.get(peak_layer, 0),
-            "total_significant_pro_bias_all_layers": total_pro,
-            "total_significant_anti_bias_all_layers": total_anti,
+            "total_significant_s_marking_all_layers": total_s_marking,
+            "total_significant_other_marking_all_layers": total_other_marking,
             "total_significant_all_layers": total_sig,
         }
         total_significant += total_sig
@@ -546,11 +582,13 @@ def build_differential_summary(
     for sub, entry in sorted(subgroup_catalog.items()):
         if not entry["analyzable"]:
             reason_parts = []
-            if entry["n_stereo"] < min_n:
-                reason_parts.append(f"n_stereo={entry['n_stereo']} < min_n={min_n}")
-            if entry["n_non_stereo"] < min_n:
+            if entry["n_targeting"] < min_n:
                 reason_parts.append(
-                    f"n_non_stereo={entry['n_non_stereo']} < min_n={min_n}"
+                    f"n_targeting={entry['n_targeting']} < min_n={min_n}"
+                )
+            if entry["n_not_targeting"] < min_n:
+                reason_parts.append(
+                    f"n_not_targeting={entry['n_not_targeting']} < min_n={min_n}"
                 )
             skipped[sub] = {
                 "reason": ", ".join(reason_parts),
@@ -566,7 +604,7 @@ def build_differential_summary(
         "test": "mann_whitney_u",
         "alternative": "two-sided",
         "context_condition_filter": "ambig",
-        "comparison_type": "question_A_stereotyped_vs_all_other",
+        "comparison_type": "question_B_targeting_vs_not_targeting_same_category",
         "subgroup_catalog": subgroup_catalog,
         "per_subgroup_results": per_subgroup_results,
         "skipped_subgroups": skipped,

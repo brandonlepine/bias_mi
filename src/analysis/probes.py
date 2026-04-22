@@ -671,7 +671,7 @@ def probe_sae_binary_subgroup(
     top_features = ranked_df[
         (ranked_df["category"] == cat)
         & (ranked_df["subgroup"] == sub)
-        & (ranked_df["direction"] == "pro_bias")
+        & (ranked_df["direction"] == "s_marking")
         & (ranked_df["rank"] <= SAE_TOP_K)
     ].copy()
 
