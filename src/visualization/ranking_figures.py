@@ -265,27 +265,63 @@ def fig_injection_layer_distribution(
     injection_layers: dict[str, dict[str, Any]],
     n_layers: int,
     fig_dir: Path,
+    ranked_df: pd.DataFrame | None = None,
 ) -> None:
-    """Histogram of injection layer selections across all subgroups."""
+    """Two-panel figure: (A) significant feature count by layer across all
+    subgroups, (B) injection layer selections.
+    """
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+    # --- Panel A: Feature count distribution across layers ---
+    ax_a = axes[0]
+    if ranked_df is not None and not ranked_df.empty:
+        s_marking_by_layer = (
+            ranked_df[ranked_df["direction"] == "s_marking"]
+            .groupby("layer").size()
+            .reindex(range(n_layers), fill_value=0)
+        )
+        other_marking_by_layer = (
+            ranked_df[ranked_df["direction"] == "other_marking"]
+            .groupby("layer").size()
+            .reindex(range(n_layers), fill_value=0)
+        )
+        x = np.arange(n_layers)
+        width = 0.4
+        ax_a.bar(x - width / 2, s_marking_by_layer.values, width,
+                 label="s-marking", color=WONG["blue"], alpha=0.8)
+        ax_a.bar(x + width / 2, other_marking_by_layer.values, width,
+                 label="other-marking", color=WONG["orange"], alpha=0.8)
+    ax_a.set_xlabel("Layer")
+    ax_a.set_ylabel("# significant features")
+    ax_a.set_title("A. Significant features by layer")
+    ax_a.legend(fontsize=8)
+
+    # --- Panel B: Injection layer selections (one dot per subgroup) ---
+    ax_b = axes[1]
     pro_layers: list[int] = []
     anti_layers: list[int] = []
-    for rec in injection_layers.values():
+    pro_labels: list[str] = []
+    anti_labels: list[str] = []
+    for key, rec in injection_layers.items():
         if rec.get("s_marking") and rec["s_marking"].get("injection_layer") is not None:
             pro_layers.append(rec["s_marking"]["injection_layer"])
+            pro_labels.append(key)
         if rec.get("other_marking") and rec["other_marking"].get("injection_layer") is not None:
             anti_layers.append(rec["other_marking"]["injection_layer"])
+            anti_labels.append(key)
 
     bins = np.arange(-0.5, n_layers + 0.5, 1)
-    fig, ax = plt.subplots(figsize=(10, 5))
-    ax.hist(pro_layers, bins=bins, alpha=0.7, label="s-marking",
-            color=WONG["blue"])
-    ax.hist(anti_layers, bins=bins, alpha=0.7, label="other-marking",
-            color=WONG["orange"])
-    ax.set_xlabel("Layer")
-    ax.set_ylabel("# subgroups")
-    ax.set_title("Distribution of injection layers across subgroups")
-    ax.legend()
-    fig.tight_layout()
+    ax_b.hist(pro_layers, bins=bins, alpha=0.7, label="s-marking",
+              color=WONG["blue"])
+    ax_b.hist(anti_layers, bins=bins, alpha=0.7, label="other-marking",
+              color=WONG["orange"])
+    ax_b.set_xlabel("Layer")
+    ax_b.set_ylabel("# subgroups")
+    ax_b.set_title("B. Selected injection layers")
+    ax_b.legend(fontsize=8)
+
+    fig.suptitle("Layer distribution of significant features", fontsize=13)
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
     _save(fig, fig_dir / "fig_injection_layer_distribution.png")
 
 
@@ -309,6 +345,7 @@ def generate_all_b2_figures(
     fig_overlap_curves(overlap_data, fig_dir)
     fig_ranked_effect_sizes(ranked_df, subgroups, fig_dir)
     fig_feature_count_per_subgroup(ranked_df, subgroups, fig_dir)
-    fig_injection_layer_distribution(injection_layers, n_layers, fig_dir)
+    fig_injection_layer_distribution(injection_layers, n_layers, fig_dir,
+                                     ranked_df=ranked_df)
 
     log("  B2 figures complete")
