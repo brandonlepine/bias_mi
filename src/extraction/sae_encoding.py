@@ -216,7 +216,7 @@ def encode_batch(
 
         if n_active > 0:
             feat_indices = nonzero_mask.nonzero(as_tuple=True)[0].cpu().numpy()
-            act_values = item_acts[nonzero_mask].cpu().detach().numpy()
+            act_values = item_acts[nonzero_mask].cpu().detach().float().numpy()
             for fidx, aval in zip(feat_indices, act_values):
                 records.append({
                     "item_idx": batch_idxs[i],
