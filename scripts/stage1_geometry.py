@@ -703,6 +703,22 @@ def main() -> None:
     all_probes: list[dict] = []
 
     for layer in layers:
+        # Per-layer checkpoint: skip if all three outputs exist for this layer
+        layer_ckpt = output_dir / f"_layer_{layer:02d}_done.json"
+        if layer_ckpt.exists():
+            log(f"\nLayer {layer}: LOADED from checkpoint")
+            # Load saved per-layer results and append
+            ckpt_cos = output_dir / f"_cosines_L{layer:02d}.parquet"
+            ckpt_dec = output_dir / f"_decomposition_L{layer:02d}.parquet"
+            ckpt_prb = output_dir / f"_probes_L{layer:02d}.parquet"
+            if ckpt_cos.exists():
+                all_cosines.extend(pd.read_parquet(ckpt_cos).to_dict("records"))
+            if ckpt_dec.exists():
+                all_decomp.extend(pd.read_parquet(ckpt_dec).to_dict("records"))
+            if ckpt_prb.exists():
+                all_probes.extend(pd.read_parquet(ckpt_prb).to_dict("records"))
+            continue
+
         log(f"\n{'=' * 60}")
         log(f"Layer {layer}")
         log(f"{'=' * 60}")
@@ -713,17 +729,34 @@ def main() -> None:
         dirs = compute_identity_directions(hs, catalog, layer)
         save_identity_directions(dirs, output_dir, layer)
 
-        all_cosines.extend(compute_pairwise_cosines(dirs, layer))
-        all_decomp.extend(compute_gram_schmidt_decomposition(dirs, layer))
-        all_probes.extend(
-            compute_identity_probes(
-                hs, meta_df, catalog, layer,
-                n_folds=args.n_cv_folds,
-                n_bootstrap=args.n_bootstrap,
-                seed=args.random_seed,
-            )
+        layer_cosines = compute_pairwise_cosines(dirs, layer)
+        layer_decomp = compute_gram_schmidt_decomposition(dirs, layer)
+        layer_probes = compute_identity_probes(
+            hs, meta_df, catalog, layer,
+            n_folds=args.n_cv_folds,
+            n_bootstrap=args.n_bootstrap,
+            seed=args.random_seed,
         )
 
+        # Save per-layer checkpoints immediately
+        pd.DataFrame(layer_cosines).to_parquet(
+            output_dir / f"_cosines_L{layer:02d}.parquet", index=False,
+        )
+        pd.DataFrame(layer_decomp).to_parquet(
+            output_dir / f"_decomposition_L{layer:02d}.parquet", index=False,
+        )
+        pd.DataFrame(layer_probes).to_parquet(
+            output_dir / f"_probes_L{layer:02d}.parquet", index=False,
+        )
+        with open(layer_ckpt, "w") as f:
+            json.dump({"layer": layer, "status": "done"}, f)
+        log(f"  Layer {layer} checkpoint saved")
+
+        all_cosines.extend(layer_cosines)
+        all_decomp.extend(layer_decomp)
+        all_probes.extend(layer_probes)
+
+    # Consolidate into final parquets
     cos_df = pd.DataFrame(all_cosines)
     decomp_df = pd.DataFrame(all_decomp)
     probes_df = pd.DataFrame(all_probes)
