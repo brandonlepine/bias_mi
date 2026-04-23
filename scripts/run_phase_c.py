@@ -296,9 +296,10 @@ def run_c1(
         filter_subgroups=args.subgroups,
     )
 
-    # Pre-load SAE layers
-    needed_layers = identify_needed_layers(ranked_df, subgroups_to_process)
-    for layer in sorted(needed_layers):
+    # Pre-load SAE layers for the full injection layer range
+    layer_min = args.injection_layer_min
+    layer_max = args.injection_layer_max
+    for layer in range(layer_min, layer_max + 1):
         ensure_sae_layer(sae_cache, layer, config)
 
     # Output directories

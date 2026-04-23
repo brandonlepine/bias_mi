@@ -1288,10 +1288,9 @@ def main() -> None:
         filter_subgroups=args.subgroups,
     )
 
-    # Pre-identify all SAE layers we'll need, load them once
-    needed_layers = identify_needed_layers(ranked_df, subgroups_to_process)
+    # Pre-load SAE layers for the full injection layer range
     sae_cache: dict[int, SAEWrapper] = {}
-    for layer in sorted(needed_layers):
+    for layer in range(args.injection_layer_min, args.injection_layer_max + 1):
         log(f"  Loading SAE for layer {layer}...")
         sae_cache[layer] = SAEWrapper(
             config["sae_source"],
