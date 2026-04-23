@@ -111,6 +111,22 @@ def parse_args() -> argparse.Namespace:
         "--injection_layer_max", type=int, default=24,
         help="C1: maximum layer for steering features (inclusive, default: 24).",
     )
+    p.add_argument(
+        "--min_n_eligible", type=int, default=10,
+        help="C1: minimum items with margin >= tau for RCR to be meaningful.",
+    )
+    p.add_argument(
+        "--max_degeneration_rate", type=float, default=0.05,
+        help="C1: maximum degeneration rate for a config to be safe.",
+    )
+    p.add_argument(
+        "--max_corruption_rate", type=float, default=0.15,
+        help="C1: maximum corruption rate (relaxed tier).",
+    )
+    p.add_argument(
+        "--max_corruption_rate_strict", type=float, default=0.05,
+        help="C1: maximum corruption rate (strict tier).",
+    )
 
     # ── C2-specific ──────────────────────────────────────────────────
     p.add_argument(

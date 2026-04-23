@@ -83,6 +83,14 @@ def parse_args() -> argparse.Namespace:
                    help="Minimum layer for steering features (inclusive, default: 10)")
     p.add_argument("--injection_layer_max", type=int, default=24,
                    help="Maximum layer for steering features (inclusive, default: 24)")
+    p.add_argument("--min_n_eligible", type=int, default=10,
+                   help="Minimum items with margin >= tau for RCR to be meaningful")
+    p.add_argument("--max_degeneration_rate", type=float, default=0.05,
+                   help="Maximum degeneration rate for a config to be safe")
+    p.add_argument("--max_corruption_rate", type=float, default=0.15,
+                   help="Maximum corruption rate (relaxed tier)")
+    p.add_argument("--max_corruption_rate_strict", type=float, default=0.05,
+                   help="Maximum corruption rate (strict tier)")
     return p.parse_args()
 
 
@@ -561,6 +569,8 @@ def run_phase2(
             rcr_1 = metrics["rcr_1.0"]["rcr"]
             eta = rcr_1 / max(vec_norm, 1e-8)
 
+            n_elig = metrics["rcr_1.0"]["n_eligible"]
+
             record = {
                 "category": cat,
                 "subgroup": sub,
@@ -581,8 +591,8 @@ def run_phase2(
             grid.append(record)
 
             log(f"    k={k:03d} τ={tn:+.1f} α={alpha:+.2f}: "
-                f"RCR₁.₀={rcr_1:.3f} η={eta:.3f} ||v||={vec_norm:.2f} "
-                f"degen={degen:.3f} corrupt={corrupt:.3f}")
+                f"RCR₁.₀={rcr_1:.3f} (n_elig={n_elig}) η={eta:.3f} "
+                f"||v||={vec_norm:.2f} degen={degen:.3f} corrupt={corrupt:.3f}")
 
     return grid
 
@@ -591,39 +601,44 @@ def run_phase2(
 # Phase 3: Optimal selection
 # ---------------------------------------------------------------------------
 
-def select_optimal(grid: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """Select optimal configuration from the grid.
+def select_optimal_tiered(
+    grid: list[dict[str, Any]],
+    min_n_eligible: int,
+    max_degen: float,
+    max_corrupt_relaxed: float,
+    max_corrupt_strict: float,
+) -> dict[str, Any]:
+    """Select optimal config under both strict and relaxed safety tiers.
 
-    Safety constraints:
-        - degeneration_rate < 0.05
-        - corruption_rate < 0.05
+    A config is eligible if:
+    - ``rcr_1.0 > 0`` (some correction happens)
+    - ``rcr_1.0_n_eligible >= min_n_eligible`` (enough items for RCR to be meaningful)
+    - ``degeneration_rate < max_degen``
+    - ``corruption_rate < corruption_threshold`` (varies by tier)
 
-    Primary metric: max eta.
-    Tie-breaking within 1% of best eta: smaller vector_norm, then higher eta.
+    Tie-breaking within 1% of best eta: smaller ||v||, then larger eta.
+
+    Returns ``{"relaxed": config_or_None, "strict": config_or_None}``.
     """
-    safe = [
-        r for r in grid
-        if r["degeneration_rate"] < 0.05 and r["corruption_rate"] < 0.05
-    ]
-
-    if not safe:
-        safe = [
+    def _select(max_corrupt: float) -> dict[str, Any] | None:
+        eligible = [
             r for r in grid
-            if r["degeneration_rate"] < 0.10 and r["corruption_rate"] < 0.05
+            if r["metrics"]["rcr_1.0"]["n_eligible"] >= min_n_eligible
+            and r["metrics"]["rcr_1.0"]["rcr"] > 0
+            and r["degeneration_rate"] < max_degen
+            and r["corruption_rate"] < max_corrupt
         ]
-        if safe:
-            log(f"    WARNING: relaxed degen<0.10 to find safe configs")
+        if not eligible:
+            return None
+        best_eta = max(r["eta"] for r in eligible)
+        candidates = [r for r in eligible if r["eta"] >= best_eta * 0.99]
+        candidates.sort(key=lambda r: (r["vector_norm"], -r["eta"]))
+        return candidates[0]
 
-    if not safe:
-        return None
-
-    best_eta = max(r["eta"] for r in safe)
-
-    # Within 1% of best
-    candidates = [r for r in safe if r["eta"] >= best_eta * 0.99]
-    candidates.sort(key=lambda r: (r["vector_norm"], -r["eta"]))
-
-    return candidates[0]
+    return {
+        "relaxed": _select(max_corrupt_relaxed),
+        "strict": _select(max_corrupt_strict),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1040,28 +1055,61 @@ def process_subgroup(
     )
     manifest["phase2_grid"] = phase2_grid
 
-    # Step 4: Phase 3 — select optimal
-    optimal = select_optimal(phase2_grid)
+    # Step 4: Phase 3 — tiered optimal selection
+    optimal_tiered = select_optimal_tiered(
+        phase2_grid,
+        min_n_eligible=args.min_n_eligible,
+        max_degen=args.max_degeneration_rate,
+        max_corrupt_relaxed=args.max_corruption_rate,
+        max_corrupt_strict=args.max_corruption_rate_strict,
+    )
+
+    optimal = optimal_tiered["relaxed"]
 
     if optimal is None:
         manifest["steering_viable"] = False
-        manifest["steering_skip_reason"] = "no_safe_config"
-        log(f"  SKIP: no config with degen<0.05 AND corrupt<0.05")
-        return manifest
 
-    if optimal["metrics"]["rcr_1.0"]["rcr"] <= 0.0:
-        manifest["steering_viable"] = False
-        manifest["steering_skip_reason"] = "rcr_zero"
-        log(f"  WARNING: optimal config has RCR=0; subgroup unsteerable")
+        # Diagnose the failure mode
+        any_n_elig = any(
+            r["metrics"]["rcr_1.0"]["n_eligible"] >= args.min_n_eligible
+            for r in phase2_grid
+        )
+        any_rcr = any(r["metrics"]["rcr_1.0"]["rcr"] > 0 for r in phase2_grid)
+        any_low_degen = any(
+            r["degeneration_rate"] < args.max_degeneration_rate
+            for r in phase2_grid
+        )
+        any_low_corrupt = any(
+            r["corruption_rate"] < args.max_corruption_rate
+            for r in phase2_grid
+        )
+
+        if not any_n_elig:
+            reason = f"no_config_with_n_eligible>={args.min_n_eligible}"
+        elif not any_rcr:
+            reason = "rcr_zero_everywhere"
+        elif not any_low_degen:
+            reason = f"all_configs_degenerate>={args.max_degeneration_rate}"
+        elif not any_low_corrupt:
+            reason = f"all_configs_corrupt>={args.max_corruption_rate}"
+        else:
+            reason = "no_config_passing_all_constraints"
+
+        manifest["steering_skip_reason"] = reason
+        manifest["optimal_relaxed"] = None
+        manifest["optimal_strict"] = None
+        log(f"  SKIP: {reason}")
         return manifest
 
     manifest["steering_viable"] = True
+    manifest["optimal_config_tier"] = "relaxed"
     manifest["optimal_k"] = optimal["k"]
     manifest["optimal_target_norm"] = optimal["target_norm"]
     manifest["optimal_alpha"] = optimal["alpha"]
     manifest["optimal_vector_norm"] = optimal["vector_norm"]
     manifest["optimal_eta"] = optimal["eta"]
     manifest["optimal_rcr_1.0"] = optimal["metrics"]["rcr_1.0"]["rcr"]
+    manifest["optimal_rcr_1.0_n_eligible"] = optimal["metrics"]["rcr_1.0"]["n_eligible"]
     manifest["optimal_rcr_0.5"] = optimal["metrics"]["rcr_0.5"]["rcr"]
     manifest["optimal_rcr_2.0"] = optimal["metrics"]["rcr_2.0"]["rcr"]
     manifest["optimal_mwcs_1.0"] = optimal["metrics"]["mwcs_1.0"]["mwcs"]
@@ -1070,13 +1118,42 @@ def process_subgroup(
     manifest["optimal_corruption_rate"] = optimal["corruption_rate"]
     manifest["optimal_features"] = s_marking_features[:optimal["k"]]
 
-    log(f"  OPTIMAL: k={optimal['k']} τ={optimal['target_norm']} "
-        f"α={optimal['alpha']:.2f}")
-    log(f"    η={optimal['eta']:.3f} "
-        f"RCR₁.₀={optimal['metrics']['rcr_1.0']['rcr']:.3f} "
-        f"||v||={optimal['vector_norm']:.3f}")
-    log(f"    degen={optimal['degeneration_rate']:.3f} "
+    # Report strict tier for comparison
+    if optimal_tiered["strict"] is not None:
+        strict = optimal_tiered["strict"]
+        manifest["optimal_strict"] = {
+            "k": strict["k"], "target_norm": strict["target_norm"],
+            "alpha": strict["alpha"], "vector_norm": strict["vector_norm"],
+            "eta": strict["eta"],
+            "rcr_1.0": strict["metrics"]["rcr_1.0"]["rcr"],
+            "rcr_1.0_n_eligible": strict["metrics"]["rcr_1.0"]["n_eligible"],
+            "degeneration_rate": strict["degeneration_rate"],
+            "corruption_rate": strict["corruption_rate"],
+            "matches_relaxed": (
+                strict["k"] == optimal["k"]
+                and strict["target_norm"] == optimal["target_norm"]
+            ),
+        }
+    else:
+        manifest["optimal_strict"] = None
+
+    log(f"  OPTIMAL (relaxed, corrupt<{args.max_corruption_rate}): "
+        f"k={optimal['k']} τ={optimal['target_norm']} α={optimal['alpha']:.2f}")
+    log(f"    η={optimal['eta']:.3f} RCR₁.₀={optimal['metrics']['rcr_1.0']['rcr']:.3f} "
+        f"(n_eligible={optimal['metrics']['rcr_1.0']['n_eligible']})")
+    log(f"    ||v||={optimal['vector_norm']:.3f} "
+        f"degen={optimal['degeneration_rate']:.3f} "
         f"corrupt={optimal['corruption_rate']:.3f}")
+    if optimal_tiered["strict"] is not None:
+        s = optimal_tiered["strict"]
+        if s["k"] == optimal["k"] and s["target_norm"] == optimal["target_norm"]:
+            log(f"    (strict tier matches relaxed)")
+        else:
+            log(f"  OPTIMAL (strict, corrupt<{args.max_corruption_rate_strict}): "
+                f"k={s['k']} τ={s['target_norm']} "
+                f"RCR₁.₀={s['metrics']['rcr_1.0']['rcr']:.3f}")
+    else:
+        log(f"  No config passes strict corrupt<{args.max_corruption_rate_strict}")
 
     # Step 5: Marginal analysis
     manifest["marginal_analysis"] = compute_marginal_analysis(
@@ -1178,8 +1255,11 @@ def save_top_level_outputs(
                 "vector_norm": r["vector_norm"],
                 "eta": r["eta"],
                 "rcr_0.5": r["metrics"]["rcr_0.5"]["rcr"],
+                "rcr_0.5_n_eligible": r["metrics"]["rcr_0.5"]["n_eligible"],
                 "rcr_1.0": r["metrics"]["rcr_1.0"]["rcr"],
+                "rcr_1.0_n_eligible": r["metrics"]["rcr_1.0"]["n_eligible"],
                 "rcr_2.0": r["metrics"]["rcr_2.0"]["rcr"],
+                "rcr_2.0_n_eligible": r["metrics"]["rcr_2.0"]["n_eligible"],
                 "mwcs_1.0": r["metrics"]["mwcs_1.0"]["mwcs"],
                 "mean_logit_shift": r["metrics"]["logit_shift"]["mean_shift"],
                 "degeneration_rate": r["degeneration_rate"],
