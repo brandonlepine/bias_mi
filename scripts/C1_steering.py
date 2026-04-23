@@ -633,8 +633,9 @@ def run_phase2(
             grid.append(record)
 
             log(f"    k={k:03d} τ={tn:+.1f} α={alpha:+.2f}: "
-                f"RCR₁.₀={rcr_1:.3f} (n_elig={n_elig}) η={eta:.3f} "
-                f"||v||={vec_norm:.2f} degen={degen:.3f} corrupt={corrupt:.3f}")
+                f"MWCS={optimizer_metric_value:.3f} RCR₁.₀(n_elig={n_elig}) "
+                f"η={eta:.3f} ||v||={vec_norm:.2f} "
+                f"degen={degen:.3f} corrupt={corrupt:.3f}")
 
     return grid
 
