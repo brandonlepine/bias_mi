@@ -127,6 +127,16 @@ def parse_args() -> argparse.Namespace:
         "--max_corruption_rate_strict", type=float, default=0.05,
         help="C1: maximum corruption rate (strict tier).",
     )
+    p.add_argument(
+        "--optimizer_metric", type=str, default="mwcs_1.0",
+        choices=["mwcs_0.5", "mwcs_1.0", "mwcs_2.0",
+                 "rcr_0.5", "rcr_1.0", "rcr_2.0"],
+        help="C1: metric the optimizer maximises (numerator of eta).",
+    )
+    p.add_argument(
+        "--mwcs_floor", type=float, default=0.05,
+        help="C1: minimum metric value for Phase 1 viability.",
+    )
 
     # ── C2-specific ──────────────────────────────────────────────────
     p.add_argument(

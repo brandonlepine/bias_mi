@@ -57,6 +57,20 @@ BASE_K_STEPS = [1, 2, 3, 5, 8, 13, 21, 34, 55]
 DEFAULT_MIN_N_PER_GROUP = 10
 
 
+def extract_metric_value(metrics: dict[str, Any], metric_key: str) -> float:
+    """Extract the scalar metric value from a compute_all_metrics result.
+
+    Handles both MWCS keys (``metrics["mwcs_1.0"]["mwcs"]``) and RCR keys
+    (``metrics["rcr_1.0"]["rcr"]``).
+    """
+    entry = metrics.get(metric_key, {})
+    if "mwcs" in entry:
+        return float(entry["mwcs"])
+    if "rcr" in entry:
+        return float(entry["rcr"])
+    return 0.0
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -91,6 +105,12 @@ def parse_args() -> argparse.Namespace:
                    help="Maximum corruption rate (relaxed tier)")
     p.add_argument("--max_corruption_rate_strict", type=float, default=0.05,
                    help="Maximum corruption rate (strict tier)")
+    p.add_argument("--optimizer_metric", type=str, default="mwcs_1.0",
+                   choices=["mwcs_0.5", "mwcs_1.0", "mwcs_2.0",
+                            "rcr_0.5", "rcr_1.0", "rcr_2.0"],
+                   help="Metric the optimizer maximises (numerator of eta)")
+    p.add_argument("--mwcs_floor", type=float, default=0.05,
+                   help="Minimum metric value for Phase 1 viability")
     return p.parse_args()
 
 
@@ -475,34 +495,52 @@ def run_phase1(
             "target_norm": tn,
             "alpha": alpha,
             "vector_norm": vec_norm,
-            "rcr_1.0": metrics["rcr_1.0"]["rcr"],
+            "metrics": metrics,
             "degeneration_rate": degen,
             "corruption_rate": corrupt,
             "n_items": len(per_item),
         }
 
+        mwcs_val = extract_metric_value(metrics, "mwcs_1.0")
+        rcr_val = metrics["rcr_1.0"]["rcr"]
+        n_elig = metrics["rcr_1.0"]["n_eligible"]
         log(f"    τ={tn:+.1f} α={alpha:+.2f} ||v||={vec_norm:.2f}: "
-            f"RCR₁.₀={metrics['rcr_1.0']['rcr']:.3f} degen={degen:.3f}")
+            f"MWCS₁.₀={mwcs_val:.3f} RCR₁.₀={rcr_val:.3f}(n_elig={n_elig}) "
+            f"degen={degen:.3f}")
 
     atomic_save_json(results, phase1_ckpt)
     return results
 
 
-def identify_viable_target_norms(phase1_results: dict[str, Any]) -> list[float]:
-    """Select target_norms passing viability criteria."""
-    viable = [
-        float(tn) for tn, r in phase1_results.items()
-        if r["rcr_1.0"] > 0 and r["degeneration_rate"] < 0.05
-    ]
+def identify_viable_target_norms(
+    phase1_results: dict[str, Any],
+    optimizer_metric: str = "mwcs_1.0",
+    metric_floor: float = 0.05,
+    max_degen: float = 0.05,
+) -> list[float]:
+    """Select target_norms passing viability criteria.
+
+    A target_norm is viable if:
+    - The optimizer metric value > metric_floor
+    - degeneration_rate < max_degen
+    """
+    viable = []
+    for tn, r in phase1_results.items():
+        metrics = r.get("metrics", {})
+        metric_val = extract_metric_value(metrics, optimizer_metric)
+        if metric_val > metric_floor and r["degeneration_rate"] < max_degen:
+            viable.append(float(tn))
 
     if len(viable) < 2:
-        # Relax to degen < 0.10
-        viable = [
-            float(tn) for tn, r in phase1_results.items()
-            if r["degeneration_rate"] < 0.10
-        ]
+        # Relax degeneration to 0.10
+        viable = []
+        for tn, r in phase1_results.items():
+            metrics = r.get("metrics", {})
+            metric_val = extract_metric_value(metrics, optimizer_metric)
+            if metric_val > metric_floor and r["degeneration_rate"] < 0.10:
+                viable.append(float(tn))
 
-    return sorted(viable, reverse=True)  # ascending magnitude: [-0.5, -1, -2, ...]
+    return sorted(viable, reverse=True)
 
 
 # ---------------------------------------------------------------------------
@@ -527,6 +565,7 @@ def run_phase2(
     cat: str,
     sub: str,
     injection_layer: int,
+    optimizer_metric: str = "mwcs_1.0",
 ) -> list[dict[str, Any]]:
     """Full (k, target_norm) sweep with per-config checkpointing."""
     ckpt_dir = output_dir / "checkpoints"
@@ -566,8 +605,9 @@ def run_phase2(
             degen = sum(1 for r in per_item if r["degenerated"]) / len(per_item)
             corrupt = sum(1 for r in per_item if r["corrupted"]) / len(per_item)
 
-            rcr_1 = metrics["rcr_1.0"]["rcr"]
-            eta = rcr_1 / max(vec_norm, 1e-8)
+            # Use the chosen optimizer metric for eta
+            optimizer_metric_value = extract_metric_value(metrics, optimizer_metric)
+            eta = optimizer_metric_value / max(vec_norm, 1e-8)
 
             n_elig = metrics["rcr_1.0"]["n_eligible"]
 
@@ -580,6 +620,8 @@ def run_phase2(
                 "injection_layer": injection_layer,
                 "vector_norm": vec_norm,
                 "eta": eta,
+                "optimizer_metric_value": optimizer_metric_value,
+                "optimizer_metric_name": optimizer_metric,
                 "metrics": metrics,
                 "degeneration_rate": degen,
                 "corruption_rate": corrupt,
@@ -603,16 +645,16 @@ def run_phase2(
 
 def select_optimal_tiered(
     grid: list[dict[str, Any]],
-    min_n_eligible: int,
     max_degen: float,
     max_corrupt_relaxed: float,
     max_corrupt_strict: float,
+    optimizer_metric: str = "mwcs_1.0",
+    metric_floor: float = 0.05,
 ) -> dict[str, Any]:
     """Select optimal config under both strict and relaxed safety tiers.
 
     A config is eligible if:
-    - ``rcr_1.0 > 0`` (some correction happens)
-    - ``rcr_1.0_n_eligible >= min_n_eligible`` (enough items for RCR to be meaningful)
+    - optimizer metric value > metric_floor
     - ``degeneration_rate < max_degen``
     - ``corruption_rate < corruption_threshold`` (varies by tier)
 
@@ -623,8 +665,7 @@ def select_optimal_tiered(
     def _select(max_corrupt: float) -> dict[str, Any] | None:
         eligible = [
             r for r in grid
-            if r["metrics"]["rcr_1.0"]["n_eligible"] >= min_n_eligible
-            and r["metrics"]["rcr_1.0"]["rcr"] > 0
+            if extract_metric_value(r["metrics"], optimizer_metric) > metric_floor
             and r["degeneration_rate"] < max_degen
             and r["corruption_rate"] < max_corrupt
         ]
@@ -1034,7 +1075,12 @@ def process_subgroup(
     )
     manifest["phase1_results"] = phase1_results
 
-    viable_target_norms = identify_viable_target_norms(phase1_results)
+    viable_target_norms = identify_viable_target_norms(
+        phase1_results,
+        optimizer_metric=args.optimizer_metric,
+        metric_floor=args.mwcs_floor,
+        max_degen=args.max_degeneration_rate,
+    )
 
     if len(viable_target_norms) < 2:
         manifest["steering_skip_reason"] = "no_viable_target_norms_in_phase1"
@@ -1052,16 +1098,18 @@ def process_subgroup(
         s_marking_features, sae_cache, baselines_stereo, stereo_items,
         steerer, k_steps, viable_target_norms, dtype,
         output_dir, cat, sub, injection_layer,
+        optimizer_metric=args.optimizer_metric,
     )
     manifest["phase2_grid"] = phase2_grid
 
     # Step 4: Phase 3 — tiered optimal selection
     optimal_tiered = select_optimal_tiered(
         phase2_grid,
-        min_n_eligible=args.min_n_eligible,
         max_degen=args.max_degeneration_rate,
         max_corrupt_relaxed=args.max_corruption_rate,
         max_corrupt_strict=args.max_corruption_rate_strict,
+        optimizer_metric=args.optimizer_metric,
+        metric_floor=args.mwcs_floor,
     )
 
     optimal = optimal_tiered["relaxed"]
@@ -1112,7 +1160,10 @@ def process_subgroup(
     manifest["optimal_rcr_1.0_n_eligible"] = optimal["metrics"]["rcr_1.0"]["n_eligible"]
     manifest["optimal_rcr_0.5"] = optimal["metrics"]["rcr_0.5"]["rcr"]
     manifest["optimal_rcr_2.0"] = optimal["metrics"]["rcr_2.0"]["rcr"]
+    manifest["optimal_mwcs_0.5"] = optimal["metrics"]["mwcs_0.5"]["mwcs"]
     manifest["optimal_mwcs_1.0"] = optimal["metrics"]["mwcs_1.0"]["mwcs"]
+    manifest["optimal_mwcs_2.0"] = optimal["metrics"]["mwcs_2.0"]["mwcs"]
+    manifest["optimizer_metric"] = args.optimizer_metric
     manifest["optimal_logit_shift"] = optimal["metrics"]["logit_shift"]
     manifest["optimal_degeneration_rate"] = optimal["degeneration_rate"]
     manifest["optimal_corruption_rate"] = optimal["corruption_rate"]

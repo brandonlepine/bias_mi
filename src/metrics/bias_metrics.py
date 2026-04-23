@@ -346,7 +346,9 @@ def compute_all_metrics(
                            "tau": tau}
             for tau in RCR_TAUS
         } | {
-            "mwcs_1.0": {"mwcs": 0.0, "tau": 1.0},
+            f"mwcs_{tau}": {"mwcs": 0.0, "tau": tau}
+            for tau in RCR_TAUS
+        } | {
             "logit_shift": {"mean_shift": 0.0, "std_shift": 0.0,
                             "median_shift": 0.0, "n": 0,
                             "per_margin_bin": {}},
@@ -360,8 +362,9 @@ def compute_all_metrics(
     for tau in RCR_TAUS:
         metrics[f"rcr_{tau}"] = compute_rcr(results, tau)
 
-    # MWCS at tau=1.0
-    metrics["mwcs_1.0"] = compute_mwcs(results, tau=1.0)
+    # MWCS at multiple thresholds
+    for tau in RCR_TAUS:
+        metrics[f"mwcs_{tau}"] = compute_mwcs(results, tau=tau)
 
     # Logit shift
     metrics["logit_shift"] = compute_logit_shift(results)
