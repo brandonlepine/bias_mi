@@ -26,7 +26,7 @@ import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import balanced_accuracy_score
-from sklearn.model_selection import GroupKFold
+from sklearn.model_selection import GroupKFold, StratifiedKFold
 
 import matplotlib
 matplotlib.use("Agg")
@@ -314,6 +314,7 @@ def compute_identity_probes(
 ) -> list[dict]:
     rng = np.random.default_rng(seed)
     meta_idx = meta_df.set_index("item_idx")
+    has_qidx = "question_index" in meta_df.columns
     rows: list[dict] = []
 
     for sub, entry in catalog.items():
@@ -326,27 +327,37 @@ def compute_identity_probes(
             if idx in hidden_states and idx in meta_idx.index:
                 X_list.append(hidden_states[idx])
                 y_list.append(1)
-                groups.append(int(meta_idx.loc[idx, "question_index"]))
+                if has_qidx:
+                    groups.append(int(meta_idx.loc[idx, "question_index"]))
         for idx in entry["group_b_item_idxs"]:
             if idx in hidden_states and idx in meta_idx.index:
                 X_list.append(hidden_states[idx])
                 y_list.append(0)
-                groups.append(int(meta_idx.loc[idx, "question_index"]))
+                if has_qidx:
+                    groups.append(int(meta_idx.loc[idx, "question_index"]))
 
         if len(X_list) < 20:
             continue
 
         X = np.stack(X_list)
         y = np.array(y_list)
-        g = np.array(groups)
 
-        eff_folds = min(n_folds, len(np.unique(g)))
-        if eff_folds < 2:
-            continue
+        # Use GroupKFold if question_index available, else StratifiedKFold
+        if has_qidx and groups:
+            g = np.array(groups)
+            eff_folds = min(n_folds, len(np.unique(g)))
+            if eff_folds < 2:
+                continue
+            cv = GroupKFold(n_splits=eff_folds)
+            splits = list(cv.split(X, y, g))
+        else:
+            g = None
+            cv = StratifiedKFold(n_splits=n_folds, shuffle=True,
+                                  random_state=seed)
+            splits = list(cv.split(X, y))
 
-        gkf = GroupKFold(n_splits=eff_folds)
         fold_accs: list[float] = []
-        for tr, te in gkf.split(X, y, g):
+        for tr, te in splits:
             if len(np.unique(y[tr])) < 2 or len(np.unique(y[te])) < 2:
                 continue
             clf = LogisticRegression(
@@ -364,15 +375,26 @@ def compute_identity_probes(
         boot_accs: list[float] = []
         for _ in range(n_bootstrap):
             bi = rng.choice(len(X), size=len(X), replace=True)
-            Xb, yb, gb = X[bi], y[bi], g[bi]
+            Xb, yb = X[bi], y[bi]
             if len(np.unique(yb)) < 2:
                 continue
-            uq = np.unique(gb)
-            rng.shuffle(uq)
-            n_te = max(1, len(uq) // 5)
-            te_groups = set(uq[:n_te])
-            tr_m = ~np.isin(gb, list(te_groups))
-            te_m = np.isin(gb, list(te_groups))
+
+            if g is not None:
+                gb = g[bi]
+                uq = np.unique(gb)
+                rng.shuffle(uq)
+                n_te = max(1, len(uq) // 5)
+                te_groups = set(uq[:n_te])
+                tr_m = ~np.isin(gb, list(te_groups))
+                te_m = np.isin(gb, list(te_groups))
+            else:
+                # Simple 80/20 split
+                n_te = max(5, len(Xb) // 5)
+                perm = rng.permutation(len(Xb))
+                te_m = np.zeros(len(Xb), dtype=bool)
+                te_m[perm[:n_te]] = True
+                tr_m = ~te_m
+
             if tr_m.sum() < 10 or te_m.sum() < 5:
                 continue
             if len(np.unique(yb[tr_m])) < 2 or len(np.unique(yb[te_m])) < 2:
@@ -401,6 +423,7 @@ def compute_identity_probes(
             "n_cv_folds": len(fold_accs),
             "n_bootstrap_success": len(boot_accs),
             "layer": layer,
+            "cv_method": "GroupKFold" if has_qidx else "StratifiedKFold",
         })
     return rows
 
