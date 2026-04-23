@@ -249,9 +249,29 @@ def encode_layer(
     parquet_path = output_dir / f"layer_{layer:02d}.parquet"
     summary_path = output_dir / f"layer_{layer:02d}_summary.json"
 
+    # Check which categories are already encoded in the existing parquet
+    existing_df = None
+    categories_to_encode = list(categories)
+
     if parquet_path.exists():
-        log(f"Layer {layer:02d}: already encoded, skipping")
-        return True
+        try:
+            existing_df = pd.read_parquet(parquet_path)
+            existing_cats = set(
+                existing_df["category"].unique()
+                if "category" in existing_df.columns else []
+            )
+            categories_to_encode = [c for c in categories if c not in existing_cats]
+            if not categories_to_encode:
+                log(f"Layer {layer:02d}: all {len(categories)} categories "
+                    f"already encoded, skipping")
+                return True
+            log(f"Layer {layer:02d}: {len(existing_cats)} categories present, "
+                f"{len(categories_to_encode)} to encode: {categories_to_encode}")
+        except Exception:
+            # Corrupted parquet — re-encode everything
+            log(f"Layer {layer:02d}: existing parquet unreadable, re-encoding all")
+            existing_df = None
+            categories_to_encode = list(categories)
 
     log(f"\n{'=' * 60}")
     log(f"Encoding layer {layer:02d}")
@@ -282,7 +302,7 @@ def encode_layer(
     per_subgroup_l0: dict[str, dict[str, Any]] = {}
     validation_done = False
 
-    for cat in categories:
+    for cat in categories_to_encode:
         cat_dir = run_dir / "A_extraction" / "activations" / cat
         if not cat_dir.is_dir():
             log(f"  No activations for {cat}, skipping")
@@ -368,12 +388,19 @@ def encode_layer(
         if device == "mps":
             torch.mps.empty_cache()
 
-    # Write parquet atomically.
+    # Write parquet atomically, merging with existing data if present.
     if all_records:
-        df = pd.DataFrame(all_records)
-        df["item_idx"] = df["item_idx"].astype(np.int32)
-        df["feature_idx"] = df["feature_idx"].astype(np.int32)
-        df["activation_value"] = df["activation_value"].astype(np.float32)
+        new_df = pd.DataFrame(all_records)
+        new_df["item_idx"] = new_df["item_idx"].astype(np.int32)
+        new_df["feature_idx"] = new_df["feature_idx"].astype(np.int32)
+        new_df["activation_value"] = new_df["activation_value"].astype(np.float32)
+
+        if existing_df is not None and not existing_df.empty:
+            df = pd.concat([existing_df, new_df], ignore_index=True)
+            log(f"  Merged: {len(existing_df)} existing + {len(new_df)} new = "
+                f"{len(df)} total rows")
+        else:
+            df = new_df
 
         tmp_path = parquet_path.with_suffix(".parquet.tmp")
         df.to_parquet(tmp_path, index=False, compression="snappy")
