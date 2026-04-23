@@ -19,14 +19,18 @@ import argparse
 import json
 import sys
 import time
+import warnings
 from collections import defaultdict
 from pathlib import Path
+
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import balanced_accuracy_score
 from sklearn.model_selection import GroupKFold, StratifiedKFold
+from tqdm import tqdm
 
 import matplotlib
 matplotlib.use("Agg")
@@ -113,7 +117,9 @@ def load_layer_hidden_states(
         if not cat_dir.exists():
             log(f"  WARNING: missing activations dir: {cat_dir}")
             continue
-        for item_path in sorted(cat_dir.glob("item_*.npz")):
+        items = sorted(cat_dir.glob("item_*.npz"))
+        for item_path in tqdm(items, desc=f"  Loading {cat}", unit="items",
+                              leave=False):
             item_idx = int(item_path.stem.split("_")[1])
             try:
                 data = np.load(item_path, allow_pickle=True)
@@ -316,10 +322,10 @@ def compute_identity_probes(
     meta_idx = meta_df.set_index("item_idx")
     has_qidx = "question_index" in meta_df.columns
     rows: list[dict] = []
+    analyzable = {s: e for s, e in catalog.items() if e["analyzable"]}
 
-    for sub, entry in catalog.items():
-        if not entry["analyzable"]:
-            continue
+    for sub, entry in tqdm(analyzable.items(), desc=f"  Probes L{layer}",
+                            unit="sub"):
         cat = entry["category"]
 
         X_list, y_list, groups = [], [], []
