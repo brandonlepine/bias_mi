@@ -103,6 +103,14 @@ def parse_args() -> argparse.Namespace:
         "--target_norms", type=str, default=None,
         help="C1: comma-separated target norm values (e.g. -0.5,-1,-2,-5,-10,-20,-40,-80).",
     )
+    p.add_argument(
+        "--injection_layer_min", type=int, default=10,
+        help="C1: minimum layer for steering features (inclusive, default: 10).",
+    )
+    p.add_argument(
+        "--injection_layer_max", type=int, default=24,
+        help="C1: maximum layer for steering features (inclusive, default: 24).",
+    )
 
     # ── C2-specific ──────────────────────────────────────────────────
     p.add_argument(

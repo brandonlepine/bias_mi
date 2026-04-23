@@ -79,6 +79,10 @@ def parse_args() -> argparse.Namespace:
                    help="Skip figure generation")
     p.add_argument("--target_norms", type=str, default=None,
                    help="Comma-separated target norm values (negative for debiasing)")
+    p.add_argument("--injection_layer_min", type=int, default=10,
+                   help="Minimum layer for steering features (inclusive, default: 10)")
+    p.add_argument("--injection_layer_max", type=int, default=24,
+                   help="Maximum layer for steering features (inclusive, default: 24)")
     return p.parse_args()
 
 
@@ -197,24 +201,58 @@ def load_stimuli(run_dir: Path, category: str) -> list[dict[str, Any]]:
 
 
 def get_ranked_s_marking_features(
-    df: pd.DataFrame, category: str, subgroup: str,
+    df: pd.DataFrame,
+    category: str,
+    subgroup: str,
+    layer_min: int | None = None,
+    layer_max: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Get ranked pro-bias features for a subgroup as list of dicts."""
-    sub_df = df[
+    """Get ranked s_marking features for a subgroup, optionally filtered to a
+    layer range.  Re-ranks by |cohens_d| within the filtered set."""
+    mask = (
         (df["category"] == category)
         & (df["subgroup"] == subgroup)
         & (df["direction"] == "s_marking")
-    ].sort_values("rank")
+    )
+    if layer_min is not None:
+        mask = mask & (df["layer"] >= layer_min)
+    if layer_max is not None:
+        mask = mask & (df["layer"] <= layer_max)
 
-    features = []
+    sub_df = df[mask].copy()
+    if sub_df.empty:
+        return []
+
+    sub_df["abs_d"] = sub_df["cohens_d"].abs()
+    sub_df = sub_df.sort_values("abs_d", ascending=False).reset_index(drop=True)
+
+    features: list[dict[str, Any]] = []
     for _, row in sub_df.iterrows():
         features.append({
             "feature_idx": int(row["feature_idx"]),
             "layer": int(row["layer"]),
-            "rank": int(row["rank"]),
             "cohens_d": float(row["cohens_d"]),
         })
     return features
+
+
+def compute_injection_layer_from_features(
+    features: list[dict[str, Any]],
+) -> int | None:
+    """Effect-weighted injection layer from a list of features.
+
+    Mirrors B2's logic: sum |cohens_d| per layer, pick max, break ties
+    by preferring deeper layers.
+    """
+    if not features:
+        return None
+    layer_scores: dict[int, float] = {}
+    for f in features:
+        layer_scores.setdefault(f["layer"], 0.0)
+        layer_scores[f["layer"]] += abs(f["cohens_d"])
+    max_score = max(layer_scores.values())
+    candidates = [l for l, s in layer_scores.items() if s == max_score]
+    return max(candidates)
 
 
 # ---------------------------------------------------------------------------
@@ -227,19 +265,15 @@ def determine_subgroups(
     filter_categories: str | None,
     filter_subgroups: str | None,
 ) -> list[tuple[str, str]]:
-    """Determine which (category, subgroup) pairs to process."""
-    # Get all subgroups that have pro-bias features AND injection layers
+    """Determine which (category, subgroup) pairs to process.
+
+    Uses ranked_df to find all subgroups with s_marking features (does NOT
+    filter by injection layer range here — that happens in process_subgroup).
+    """
+    s_marking = ranked_df[ranked_df["direction"] == "s_marking"]
     all_pairs = set()
-    for key, entry in injection_layers.items():
-        if "/" not in key:
-            continue
-        cat, sub = key.split("/", 1)
-        s_marking = entry.get("s_marking")
-        if s_marking is None:
-            continue
-        if "injection_layer" not in s_marking:
-            continue
-        all_pairs.add((cat, sub))
+    for _, row in s_marking[["category", "subgroup"]].drop_duplicates().iterrows():
+        all_pairs.add((row["category"], row["subgroup"]))
 
     # Apply category filter
     if filter_categories:
@@ -871,7 +905,7 @@ def process_subgroup(
     cat: str,
     sub: str,
     ranked_df: pd.DataFrame,
-    injection_layers: dict[str, Any],
+    injection_layers: dict[str, Any],  # kept for compatibility; not used for layer selection
     metadata_df: pd.DataFrame,
     wrapper: ModelWrapper,
     sae_cache: dict[int, SAEWrapper],
@@ -898,28 +932,43 @@ def process_subgroup(
         "steering_skip_reason": None,
     }
 
-    # Step 0: Get injection layer from B2
-    inj_entry = injection_layers.get(sub_key, {})
-    s_marking_entry = inj_entry.get("s_marking") if inj_entry else None
+    # Step 0: Get s_marking features filtered to allowed layer range
+    layer_min = getattr(args, "injection_layer_min", 10)
+    layer_max = getattr(args, "injection_layer_max", 24)
 
-    if s_marking_entry is None or "injection_layer" not in (s_marking_entry or {}):
-        manifest["steering_skip_reason"] = "no_significant_features"
-        log(f"  SKIP: no significant pro-bias features")
-        return manifest
+    s_marking_features = get_ranked_s_marking_features(
+        ranked_df, cat, sub,
+        layer_min=layer_min, layer_max=layer_max,
+    )
 
-    injection_layer = s_marking_entry["injection_layer"]
-    manifest["injection_layer"] = injection_layer
-
-    # Step 0b: Get top pro-bias features (after artifact filter)
-    s_marking_features = get_ranked_s_marking_features(ranked_df, cat, sub)
+    # Count global features for comparison
+    n_global = int(
+        ((ranked_df["category"] == cat)
+         & (ranked_df["subgroup"] == sub)
+         & (ranked_df["direction"] == "s_marking")).sum()
+    )
+    manifest["n_s_marking_features_global"] = n_global
 
     if len(s_marking_features) == 0:
-        manifest["steering_skip_reason"] = "no_features_after_filter"
-        log(f"  SKIP: no features remaining after artifact filter")
+        manifest["steering_skip_reason"] = (
+            f"no_s_marking_features_in_range[{layer_min},{layer_max}]"
+        )
+        log(f"  SKIP: no s_marking features in layer range "
+            f"[{layer_min}, {layer_max}] (global: {n_global})")
         return manifest
 
-    log(f"  Injection layer: {injection_layer} (from B2 effect-weighted)")
-    log(f"  Pro-bias features after filter: {len(s_marking_features)}")
+    # Compute injection layer from filtered features (effect-weighted)
+    injection_layer = compute_injection_layer_from_features(s_marking_features)
+    manifest["injection_layer"] = injection_layer
+    manifest["injection_layer_range"] = [layer_min, layer_max]
+    manifest["n_s_marking_features_in_range"] = len(s_marking_features)
+
+    # Log layer distribution of top-50 features
+    layer_dist = Counter(f["layer"] for f in s_marking_features[:50])
+    log(f"  s_marking features in range [{layer_min}, {layer_max}]: "
+        f"{len(s_marking_features)} (global: {n_global})")
+    log(f"  Injection layer: {injection_layer} (effect-weighted within range)")
+    log(f"  Top-50 layer distribution: {dict(sorted(layer_dist.items()))}")
 
     # Step 1: Partition items
     stimuli = load_stimuli(run_dir, cat)
