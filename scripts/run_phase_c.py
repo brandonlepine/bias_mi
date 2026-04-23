@@ -280,7 +280,7 @@ def run_c1(
         partition_items,
         process_subgroup,
         save_top_level_outputs,
-        select_optimal,
+        select_optimal_tiered,
     )
     from src.sae_localization.steering import SAESteerer
 
