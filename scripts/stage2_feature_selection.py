@@ -200,11 +200,13 @@ def extract_all_token_activations(
             "items_failed": [],
         }
 
-    # Clean up stale .tmp files from prior interrupted runs
+    # Clean up stale temp files from prior interrupted runs.
+    # np.savez silently appends .npz, so a tmp write to "foo.npz.tmp"
+    # actually creates "foo.npz.tmp.npz" — clean those up too.
     for cat in categories:
         cat_dir = output_root / cat
         if cat_dir.exists():
-            for tmp in cat_dir.glob("*.tmp"):
+            for tmp in list(cat_dir.glob("*.tmp")) + list(cat_dir.glob("*.tmp.npz")):
                 tmp.unlink()
                 log(f"  Removed stale tmp: {tmp.name}")
 
@@ -312,16 +314,20 @@ def extract_all_token_activations(
                     f"Bad hidden shape {hidden.shape}, expected (seq, {hidden_dim})"
                 )
 
-                # Atomic write
-                tmp_path = out_path.with_suffix(".npz.tmp")
+                # Atomic write — use .tmp (no .npz in name) so np.savez
+                # appends .npz → file is "item_NNNNNN.tmp.npz", then
+                # rename to final .npz path.
+                tmp_stem = out_path.with_suffix(".tmp")
                 np.savez(
-                    tmp_path,
+                    tmp_stem,
                     hidden_all_tokens=hidden,
                     tokens=np.array(tokens),
                     item_idx=np.array([item_idx], dtype=np.int32),
                     seq_len=np.array([len(tokens)], dtype=np.int32),
                 )
-                tmp_path.rename(out_path)
+                # np.savez appends .npz → actual file is tmp_stem.with_suffix(".tmp.npz")
+                tmp_actual = tmp_stem.with_suffix(".tmp.npz")
+                tmp_actual.rename(out_path)
 
                 summary["n_items_extracted"] += 1
                 n_cat_extracted += 1
@@ -572,7 +578,7 @@ def encode_all_items_max_pooled(
 
         item_files = sorted(
             p for p in cat_dir.glob("item_*.npz")
-            if not p.name.endswith(".tmp")
+            if ".tmp" not in p.name
         )
         if not item_files:
             log(f"    {cat}: 0 cached files found; skipping")
@@ -1253,7 +1259,7 @@ def main() -> None:
     )
     n_cached_files = sum(
         sum(1 for p in (cache_root / cat).glob("item_*.npz")
-            if not p.name.endswith(".tmp"))
+            if ".tmp" not in p.name)
         for cat in categories
         if (cache_root / cat).exists()
     )
