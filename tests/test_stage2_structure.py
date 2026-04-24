@@ -145,6 +145,15 @@ def make_metadata(
     return pd.DataFrame(rows)
 
 
+def make_qi_map(meta_df: pd.DataFrame) -> dict[int, int]:
+    """Build item_idx → question_index from metadata that has the column."""
+    return {
+        int(row["item_idx"]): int(row["question_index"])
+        for _, row in meta_df.iterrows()
+        if "question_index" in row.index
+    }
+
+
 class FakeSAEWrapper:
     """Minimal stub to test identity-feature and max-pool logic."""
 
@@ -466,6 +475,7 @@ def test_bias_prediction_basic():
         min_n_non_stereo=3,
         seed=42,
         layer=14,
+        qi_map=make_qi_map(meta_df),
     )
 
     check(len(df) > 0, "nonzero features found")
@@ -514,6 +524,7 @@ def test_bias_prediction_insufficient_items():
         l1_c_values=[1.0], n_cv_folds=3,
         min_n_stereo=5, min_n_non_stereo=5,
         seed=42, layer=14,
+        qi_map=make_qi_map(meta_df),
     )
 
     check(len(df) == 0, "no features (insufficient non-stereo)")
@@ -537,12 +548,12 @@ def test_bias_prediction_no_question_index():
 
     alias_clusters = {"so": {"scoped_subgroups": ["gay"], "clusters": []}}
 
-    # Should not crash
+    # Should not crash — qi_map=None simulates missing stimuli
     df, summary = compute_bias_prediction_features(
         z_max, meta_df, alias_clusters,
         l1_c_values=[1.0], n_cv_folds=3,
         min_n_stereo=3, min_n_non_stereo=3,
-        seed=42, layer=14,
+        seed=42, layer=14, qi_map=None,
     )
     check(True, "did not crash without question_index")
 
@@ -567,12 +578,14 @@ def test_bias_prediction_checkpoint_resume():
     with tempfile.TemporaryDirectory() as tmpdir:
         ckpt_dir = Path(tmpdir) / "ckpts"
 
+        qi = make_qi_map(meta_df)
+
         # First run
         df1, summary1 = compute_bias_prediction_features(
             z_max, meta_df, alias_clusters,
             l1_c_values=[1.0], n_cv_folds=3,
             min_n_stereo=3, min_n_non_stereo=3,
-            seed=42, layer=14, checkpoint_dir=ckpt_dir,
+            seed=42, layer=14, checkpoint_dir=ckpt_dir, qi_map=qi,
         )
 
         # Checkpoint files should exist
@@ -584,7 +597,7 @@ def test_bias_prediction_checkpoint_resume():
             z_max, meta_df, alias_clusters,
             l1_c_values=[1.0], n_cv_folds=3,
             min_n_stereo=3, min_n_non_stereo=3,
-            seed=42, layer=14, checkpoint_dir=ckpt_dir,
+            seed=42, layer=14, checkpoint_dir=ckpt_dir, qi_map=qi,
         )
 
         # Results should be identical
@@ -805,6 +818,7 @@ def test_probe_checkpoint_corrupt_recovery():
             l1_c_values=[1.0], n_cv_folds=3,
             min_n_stereo=3, min_n_non_stereo=3,
             seed=42, layer=14, checkpoint_dir=ckpt_dir,
+            qi_map=make_qi_map(meta_df),
         )
         check(True, "recovered from corrupt checkpoint without crash")
 

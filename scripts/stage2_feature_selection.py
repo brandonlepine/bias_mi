@@ -52,6 +52,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.models.wrapper import ModelWrapper, locate_hidden_tensor
 from src.sae.wrapper import SAEWrapper
+from src.analysis.probes import load_question_index_map, get_groups_for_items
 from src.utils.io import atomic_save_json
 from src.utils.logging import progress_bar
 
@@ -645,6 +646,7 @@ def compute_bias_prediction_features(
     seed: int,
     layer: int,
     checkpoint_dir: Path | None = None,
+    qi_map: dict[int, int] | None = None,
 ) -> tuple[pd.DataFrame, dict]:
     """L1-regularised logistic regression predicting biased output from SAE acts.
 
@@ -654,14 +656,16 @@ def compute_bias_prediction_features(
     If checkpoint_dir is set, saves per-subgroup results incrementally and
     skips subgroups already completed on a prior run.
 
+    qi_map is the item_idx → question_index mapping loaded from stimuli JSONs
+    via load_question_index_map().
+
     Returns (features_df, probe_summary_dict).
     """
     rows: list[dict] = []
     summary: dict = {}
 
-    has_qidx = "question_index" in meta_df.columns
-    if not has_qidx:
-        log("  WARNING: metadata has no 'question_index' column — "
+    if qi_map is None or len(qi_map) == 0:
+        log("  WARNING: no question_index mapping available — "
             "GroupKFold will treat each item as its own group "
             "(equivalent to leave-one-out, which has poor variance)")
 
@@ -709,7 +713,7 @@ def compute_bias_prediction_features(
         # Build X, y, groups from items with cached max-pool activations
         X_rows: list[np.ndarray] = []
         y_rows: list[int] = []
-        groups: list[int] = []
+        item_idxs: list[int] = []
 
         for _, row in targeting.iterrows():
             item_idx = int(row["item_idx"])
@@ -720,15 +724,18 @@ def compute_bias_prediction_features(
                 1 if row["model_answer_role"] == "stereotyped_target" else 0
             )
             y_rows.append(y_val)
-            if has_qidx:
-                groups.append(int(row["question_index"]))
+            item_idxs.append(item_idx)
 
         if len(X_rows) == 0:
             continue
 
         X = np.stack(X_rows)
         y = np.array(y_rows)
-        g = np.array(groups) if has_qidx else np.arange(len(y))
+        # Group labels from stimuli-based question_index mapping
+        if qi_map:
+            g = get_groups_for_items(item_idxs, qi_map)
+        else:
+            g = np.arange(len(y))
 
         n_stereo = int((y == 1).sum())
         n_non_stereo = int((y == 0).sum())
@@ -1315,8 +1322,10 @@ def main() -> None:
             {"status": "done", "n_rows": len(identity_df)}, phase_2c_done,
         )
 
-    # === Load metadata ===
+    # === Load metadata and question_index map ===
     meta_df = load_metadata(run_dir)
+    qi_map = load_question_index_map(run_dir, categories)
+    log(f"Loaded question_index map: {len(qi_map)} items")
 
     # === Phase 2d: Method B ===
     phase_2d_done = checkpoint_dir / "_phase_2d_done.json"
@@ -1347,7 +1356,7 @@ def main() -> None:
         bias_df, probe_summary = compute_bias_prediction_features(
             z_max, meta_df, alias_clusters, l1_c_values, args.n_cv_folds,
             args.min_n_stereo, args.min_n_non_stereo, args.random_seed,
-            args.layer, checkpoint_dir=probe_ckpt_dir,
+            args.layer, checkpoint_dir=probe_ckpt_dir, qi_map=qi_map,
         )
         bias_df.to_parquet(bias_parquet, index=False)
         atomic_save_json(probe_summary, probe_json)
