@@ -1232,8 +1232,20 @@ def main() -> None:
                 existing_summary = json.load(f)
             existing_cats = set(existing_summary.get("categories", []))
             if set(categories).issubset(existing_cats):
-                log("Extraction cache covers all requested categories; skipping")
-                needs_extraction = False
+                # Verify actual files exist — summary may be stale from
+                # a crashed run that left only ghost .tmp files
+                n_real = sum(
+                    sum(1 for p in (cache_root / cat).glob("item_*.npz")
+                        if ".tmp" not in p.name)
+                    for cat in categories
+                    if (cache_root / cat).exists()
+                )
+                if n_real > 0:
+                    log(f"Extraction cache valid ({n_real} files); skipping")
+                    needs_extraction = False
+                else:
+                    log("Extraction summary exists but no valid .npz files "
+                        "found — re-extracting")
 
         if needs_extraction:
             log("Loading model for extraction...")
