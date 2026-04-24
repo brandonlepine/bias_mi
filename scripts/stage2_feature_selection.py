@@ -619,7 +619,8 @@ def encode_all_items_max_pooled(
                 )
                 # Max pool across tokens
                 z_max = z_all.max(dim=0).values  # (n_features,)
-                z_max_cpu = z_max.cpu().numpy().astype(np.float32)
+                # Cast to float32 before .numpy() — bfloat16 not supported by numpy
+                z_max_cpu = z_max.float().cpu().numpy()
 
             del hidden_gpu, z_all, z_max
 
