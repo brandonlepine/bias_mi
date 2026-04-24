@@ -200,6 +200,14 @@ def extract_all_token_activations(
             "items_failed": [],
         }
 
+    # Clean up stale .tmp files from prior interrupted runs
+    for cat in categories:
+        cat_dir = output_root / cat
+        if cat_dir.exists():
+            for tmp in cat_dir.glob("*.tmp"):
+                tmp.unlink()
+                log(f"  Removed stale tmp: {tmp.name}")
+
     # Validate hook fires before processing thousands of items
     log(f"  Validating hook on layer {layer}...")
     _hook_storage: dict[str, torch.Tensor] = {}
@@ -562,7 +570,10 @@ def encode_all_items_max_pooled(
             log(f"    {cat}: no activations cache; skipping")
             continue
 
-        item_files = sorted(cat_dir.glob("item_*.npz"))
+        item_files = sorted(
+            p for p in cat_dir.glob("item_*.npz")
+            if not p.name.endswith(".tmp")
+        )
         if not item_files:
             log(f"    {cat}: 0 cached files found; skipping")
             continue
@@ -1241,7 +1252,8 @@ def main() -> None:
         / f"L{args.layer:02d}"
     )
     n_cached_files = sum(
-        len(list((cache_root / cat).glob("item_*.npz")))
+        sum(1 for p in (cache_root / cat).glob("item_*.npz")
+            if not p.name.endswith(".tmp"))
         for cat in categories
         if (cache_root / cat).exists()
     )
