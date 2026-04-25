@@ -133,9 +133,26 @@ def _resolve_category_name(cat: str) -> str:
 
 
 def _ensure_list(val: Any) -> list[str]:
-    """Coerce a possibly-serialised list column to list[str], lowercase."""
-    if isinstance(val, list):
+    """Coerce a possibly-serialised list column to list[str], lowercase.
+
+    Handles: Python lists, numpy arrays, pyarrow ListScalars, JSON strings,
+    ast-parsable strings, and bare string values.
+    """
+    # Handle pyarrow scalars (pandas ArrowDtype backend)
+    if hasattr(val, "as_py"):
+        val = val.as_py()
+    # Handle None / NaN
+    if val is None:
+        return []
+    if isinstance(val, float) and np.isnan(val):
+        return []
+    # Handle numpy arrays (parquet list columns round-trip as ndarray)
+    if isinstance(val, np.ndarray):
         return [str(s).strip().lower() for s in val if s]
+    # Handle Python lists / tuples
+    if isinstance(val, (list, tuple)):
+        return [str(s).strip().lower() for s in val if s]
+    # Handle JSON-serialised strings (e.g. '["gay", "lesbian"]')
     if isinstance(val, str):
         try:
             parsed = json.loads(val)
@@ -144,8 +161,9 @@ def _ensure_list(val: Any) -> list[str]:
                 parsed = ast.literal_eval(val)
             except (ValueError, SyntaxError):
                 return [val.strip().lower()] if val.strip() else []
-        if isinstance(parsed, list):
+        if isinstance(parsed, (list, tuple)):
             return [str(s).strip().lower() for s in parsed if s]
+        return [str(parsed).strip().lower()] if parsed else []
     return []
 
 
@@ -158,6 +176,15 @@ def load_enriched_metadata(run_dir: Path) -> pd.DataFrame:
         sys.exit(1)
 
     df = pd.read_parquet(meta_path)
+
+    # Diagnostic: report raw types before parsing
+    for col in ["stereotyped_groups", "mentioned_subgroups"]:
+        if col in df.columns:
+            sample_val = df[col].dropna().iloc[0] if df[col].notna().any() else None
+            log(f"  {col} raw dtype={df[col].dtype}, "
+                f"sample type={type(sample_val).__name__}, "
+                f"sample={sample_val!r}")
+
     df["stereotyped_groups"] = df["stereotyped_groups"].apply(_ensure_list)
     df["mentioned_subgroups"] = df["mentioned_subgroups"].apply(_ensure_list)
 
@@ -229,14 +256,27 @@ def build_item_to_question_index(
 ) -> dict[int, int]:
     """Map item_idx → question_index using stimuli bridge and BBQ lookup."""
     result: dict[int, int] = {}
+    per_cat_mapped: Counter = Counter()
+    per_cat_total: Counter = Counter()
+
     for _, row in meta_df.iterrows():
         idx = int(row["item_idx"])
         cat_short = row["category_short"]
+        per_cat_total[cat_short] += 1
         # item_idx → example_id via bridge
         eid = stimuli_bridges.get(cat_short, {}).get(idx, idx)
         qi = qi_maps.get(cat_short, {}).get(int(eid))
         if qi is not None:
             result[idx] = qi
+            per_cat_mapped[cat_short] += 1
+
+    for cat in sorted(per_cat_total):
+        mapped = per_cat_mapped[cat]
+        total = per_cat_total[cat]
+        pct = 100 * mapped / total if total > 0 else 0
+        if pct < 100:
+            log(f"  question_index {cat}: {mapped}/{total} ({pct:.0f}%) mapped")
+
     return result
 
 
@@ -256,6 +296,7 @@ def load_stimuli_bridges(
             for p in sorted(processed_dir.glob(f"stimuli_{cat}_*.json")):
                 candidates.append(p)
 
+        found = False
         for path in candidates:
             if path.is_file():
                 with open(path) as f:
@@ -264,7 +305,12 @@ def load_stimuli_bridges(
                     int(it["item_idx"]): int(it["example_id"])
                     for it in items if "example_id" in it
                 }
+                log(f"  Stimuli bridge {cat}: {len(bridges[cat])} items from {path}")
+                found = True
                 break
+        if not found:
+            log(f"  WARNING: no stimuli file found for {cat}; "
+                f"question_index grouping may be incomplete")
     return bridges
 
 

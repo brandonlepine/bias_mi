@@ -303,7 +303,9 @@ def report_per_category(df: pd.DataFrame) -> None:
         n_neg = (sub["question_polarity"] == "neg").sum()
         n_nonneg = (sub["question_polarity"] == "nonneg").sum()
         n_mentioned = sub["mentioned_subgroups"].apply(
-            lambda x: isinstance(x, list) and len(x) > 0
+            lambda x: len(json.loads(x)) > 0 if isinstance(x, str) else (
+                isinstance(x, list) and len(x) > 0
+            )
         ).sum()
         bias_dist = sub["is_biased_response"].value_counts().to_dict()
         role_dist = sub["model_answer_role"].value_counts().to_dict()
@@ -584,7 +586,7 @@ def main() -> None:
 
     # If question_polarity already exists, overwrite with validated version.
     df_enriched["question_polarity"] = polarity_col
-    df_enriched["mentioned_subgroups"] = mentioned_col
+    df_enriched["mentioned_subgroups"] = [json.dumps(ms) for ms in mentioned_col]
     df_enriched["is_biased_response"] = pd.array(biased_col, dtype="int8")
 
     # ── Report match rates ──────────────────────────────────────────────
