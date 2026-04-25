@@ -24,15 +24,20 @@ import json
 import os
 import sys
 import time
+import warnings
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
+
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import balanced_accuracy_score, roc_auc_score
-from sklearn.model_selection import GroupKFold, StratifiedKFold
+from sklearn.model_selection import GroupKFold
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
 
 import matplotlib
@@ -110,9 +115,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--categories", type=str, default=None,
                    help="Comma-separated subset of categories (short names)")
     p.add_argument("--min_n_per_group", type=int, default=10)
-    p.add_argument("--n_bootstrap", type=int, default=1000)
+    p.add_argument("--n_bootstrap", type=int, default=100,
+                   help="Bootstrap iterations for CIs; set to 0 to skip")
     p.add_argument("--n_cv_folds", type=int, default=5)
     p.add_argument("--random_seed", type=int, default=42)
+    p.add_argument("--probe_max_iter", type=int, default=200,
+                   help="max_iter for LogisticRegression")
     p.add_argument("--race_intersectional_threshold", type=float, default=0.10,
                    help="If race-only items < threshold, strip gender prefix")
     p.add_argument("--skip_figures", action="store_true")
@@ -686,138 +694,183 @@ def compute_direction_alignment(
 # Probes
 # ---------------------------------------------------------------------------
 
-def compute_probes(
+def make_probe_pipeline(seed: int, max_iter: int = 200) -> Pipeline:
+    """Per-fold standardization + L2 logistic regression with liblinear solver."""
+    return Pipeline([
+        ("scaler", StandardScaler()),
+        ("clf", LogisticRegression(
+            penalty="l2",
+            C=1.0,
+            solver="liblinear",
+            max_iter=max_iter,
+            class_weight="balanced",
+            random_state=seed,
+        )),
+    ])
+
+
+def compute_directional_probe(
+    hidden_states: dict[int, np.ndarray],
+    group_a_idxs: list[int],
+    group_b_idxs: list[int],
+    qi_map: dict[int, int],
+    n_folds: int = 5,
+    n_bootstrap: int = 100,
+    seed: int = 42,
+    max_iter: int = 200,
+) -> dict | None:
+    """Train probe to distinguish Group A from Group B using hidden states.
+
+    StandardScaler is fit inside each fold via the Pipeline (no leakage).
+    Returns dict with probe metrics, or None if insufficient data.
+    """
+    rng = np.random.default_rng(seed)
+
+    X_list, y_list, groups = [], [], []
+    for idx in group_a_idxs:
+        if idx in hidden_states:
+            X_list.append(hidden_states[idx])
+            y_list.append(1)
+            groups.append(qi_map.get(idx, idx))
+    for idx in group_b_idxs:
+        if idx in hidden_states:
+            X_list.append(hidden_states[idx])
+            y_list.append(0)
+            groups.append(qi_map.get(idx, idx))
+
+    if len(X_list) < 20:
+        return None
+
+    X = np.stack(X_list).astype(np.float32)
+    y = np.array(y_list)
+    g = np.array(groups)
+
+    n_a = int((y == 1).sum())
+    n_b = int((y == 0).sum())
+
+    n_unique_groups = len(np.unique(g))
+    eff_folds = min(n_folds, n_unique_groups)
+    if eff_folds < 2:
+        return None
+
+    gkf = GroupKFold(n_splits=eff_folds)
+    fold_ba: list[float] = []
+    fold_auroc: list[float] = []
+
+    for tr, te in gkf.split(X, y, g):
+        if len(np.unique(y[tr])) < 2 or len(np.unique(y[te])) < 2:
+            continue
+        try:
+            pipe = make_probe_pipeline(seed=seed, max_iter=max_iter)
+            pipe.fit(X[tr], y[tr])
+            proba = pipe.predict_proba(X[te])[:, 1]
+            pred = (proba >= 0.5).astype(int)
+            fold_ba.append(balanced_accuracy_score(y[te], pred))
+            fold_auroc.append(roc_auc_score(y[te], proba))
+        except Exception:
+            continue
+
+    if not fold_ba:
+        return None
+
+    mean_ba = float(np.mean(fold_ba))
+    mean_auroc = float(np.mean(fold_auroc))
+
+    # Bootstrap CIs
+    boot_ba: list[float] = []
+    boot_auroc: list[float] = []
+
+    for _ in range(n_bootstrap):
+        bi = rng.choice(len(X), size=len(X), replace=True)
+        Xb, yb, gb = X[bi], y[bi], g[bi]
+        if len(np.unique(yb)) < 2:
+            continue
+
+        uq = np.unique(gb)
+        if len(uq) < 5:
+            continue
+        rng.shuffle(uq)
+        n_te = max(1, len(uq) // 5)
+        te_groups = set(uq[:n_te])
+        tr_m = ~np.isin(gb, list(te_groups))
+        te_m = np.isin(gb, list(te_groups))
+
+        if (tr_m.sum() < 10 or te_m.sum() < 5
+                or len(np.unique(yb[tr_m])) < 2
+                or len(np.unique(yb[te_m])) < 2):
+            continue
+        try:
+            pipe = make_probe_pipeline(seed=seed, max_iter=max_iter)
+            pipe.fit(Xb[tr_m], yb[tr_m])
+            proba = pipe.predict_proba(Xb[te_m])[:, 1]
+            pred = (proba >= 0.5).astype(int)
+            boot_ba.append(balanced_accuracy_score(yb[te_m], pred))
+            boot_auroc.append(roc_auc_score(yb[te_m], proba))
+        except Exception:
+            continue
+
+    if len(boot_ba) >= 20:
+        ba_ci_lo = float(np.percentile(boot_ba, 2.5))
+        ba_ci_hi = float(np.percentile(boot_ba, 97.5))
+        auroc_ci_lo = float(np.percentile(boot_auroc, 2.5))
+        auroc_ci_hi = float(np.percentile(boot_auroc, 97.5))
+    else:
+        ba_ci_lo = ba_ci_hi = auroc_ci_lo = auroc_ci_hi = None
+
+    return {
+        "balanced_accuracy": mean_ba,
+        "auroc": mean_auroc,
+        "ba_ci_low": ba_ci_lo, "ba_ci_high": ba_ci_hi,
+        "auroc_ci_low": auroc_ci_lo, "auroc_ci_high": auroc_ci_hi,
+        "n_a": n_a, "n_b": n_b,
+        "n_cv_folds": len(fold_ba),
+        "n_bootstrap_success": len(boot_ba),
+    }
+
+
+def run_all_probes(
     directions: dict[DirectionKey, dict],
     hidden_states: dict[int, np.ndarray],
     qi_map: dict[int, int],
     n_folds: int = 5,
-    n_bootstrap: int = 1000,
+    n_bootstrap: int = 100,
     seed: int = 42,
+    max_iter: int = 200,
 ) -> list[dict]:
-    """Train logistic regression probes for each direction, report BA + AUROC."""
-    rng = np.random.default_rng(seed)
+    """Run probes for all directions. Returns rows for probe_accuracies.parquet."""
     rows: list[dict] = []
 
     for (cat, sub, dir_type, gran), info in tqdm(
-        directions.items(), desc="  Probes", unit="dir",
+        directions.items(), desc="  Probes", unit="probe",
     ):
-        group_a_idxs = info["group_a_idxs"]
-        group_b_idxs = info["group_b_idxs"]
+        result = compute_directional_probe(
+            hidden_states,
+            info["group_a_idxs"],
+            info["group_b_idxs"],
+            qi_map,
+            n_folds=n_folds,
+            n_bootstrap=n_bootstrap,
+            seed=seed,
+            max_iter=max_iter,
+        )
 
-        X_list, y_list, groups = [], [], []
-        for idx in group_a_idxs:
-            if idx in hidden_states:
-                X_list.append(hidden_states[idx])
-                y_list.append(1)
-                groups.append(qi_map.get(idx, idx))
-        for idx in group_b_idxs:
-            if idx in hidden_states:
-                X_list.append(hidden_states[idx])
-                y_list.append(0)
-                groups.append(qi_map.get(idx, idx))
-
-        if len(X_list) < 20:
-            continue
-
-        X = np.stack(X_list)
-        y = np.array(y_list)
-        g = np.array(groups)
-
-        n_groups = len(np.unique(g))
-        eff_folds = min(n_folds, n_groups)
-        if eff_folds < 2:
-            # Can't do CV; record the direction but skip probe
-            rows.append({
-                "category": cat, "subgroup": sub,
-                "direction_type": dir_type, "granularity": gran,
+        row: dict[str, Any] = {
+            "category": cat, "subgroup": sub,
+            "direction_type": dir_type, "granularity": gran,
+        }
+        if result is None:
+            row.update({
                 "balanced_accuracy": None, "auroc": None,
                 "ba_ci_low": None, "ba_ci_high": None,
                 "auroc_ci_low": None, "auroc_ci_high": None,
-                "n_a": int((y == 1).sum()), "n_b": int((y == 0).sum()),
+                "n_a": 0, "n_b": 0,
                 "n_cv_folds": 0, "n_bootstrap_success": 0,
+                "status": "insufficient_data",
             })
-            continue
-
-        cv = GroupKFold(n_splits=eff_folds)
-        fold_ba: list[float] = []
-        fold_auroc: list[float] = []
-
-        for tr, te in cv.split(X, y, g):
-            if len(np.unique(y[tr])) < 2 or len(np.unique(y[te])) < 2:
-                continue
-            clf = LogisticRegression(
-                penalty="l2", C=1.0, max_iter=1000,
-                class_weight="balanced", random_state=seed,
-            )
-            clf.fit(X[tr], y[tr])
-            preds = clf.predict(X[te])
-            fold_ba.append(balanced_accuracy_score(y[te], preds))
-            # AUROC from probabilities
-            if hasattr(clf, "predict_proba"):
-                probs = clf.predict_proba(X[te])
-                if probs.shape[1] == 2:
-                    try:
-                        fold_auroc.append(roc_auc_score(y[te], probs[:, 1]))
-                    except ValueError:
-                        pass
-
-        if not fold_ba:
-            continue
-
-        mean_ba = float(np.mean(fold_ba))
-        mean_auroc = float(np.mean(fold_auroc)) if fold_auroc else None
-
-        # Bootstrap CIs
-        boot_ba: list[float] = []
-        boot_auroc: list[float] = []
-        for _ in range(n_bootstrap):
-            bi = rng.choice(len(X), size=len(X), replace=True)
-            Xb, yb, gb = X[bi], y[bi], g[bi]
-            if len(np.unique(yb)) < 2:
-                continue
-
-            uq = np.unique(gb)
-            rng.shuffle(uq)
-            n_te = max(1, len(uq) // 5)
-            te_groups = set(uq[:n_te])
-            tr_m = ~np.isin(gb, list(te_groups))
-            te_m = np.isin(gb, list(te_groups))
-
-            if tr_m.sum() < 10 or te_m.sum() < 5:
-                continue
-            if len(np.unique(yb[tr_m])) < 2 or len(np.unique(yb[te_m])) < 2:
-                continue
-            try:
-                clf = LogisticRegression(
-                    penalty="l2", C=1.0, max_iter=1000,
-                    class_weight="balanced", random_state=seed,
-                )
-                clf.fit(Xb[tr_m], yb[tr_m])
-                preds = clf.predict(Xb[te_m])
-                boot_ba.append(balanced_accuracy_score(yb[te_m], preds))
-                if hasattr(clf, "predict_proba"):
-                    probs = clf.predict_proba(Xb[te_m])
-                    if probs.shape[1] == 2:
-                        boot_auroc.append(roc_auc_score(yb[te_m], probs[:, 1]))
-            except Exception:
-                continue
-
-        ba_ci_lo = float(np.percentile(boot_ba, 2.5)) if len(boot_ba) >= 100 else None
-        ba_ci_hi = float(np.percentile(boot_ba, 97.5)) if len(boot_ba) >= 100 else None
-        auroc_ci_lo = float(np.percentile(boot_auroc, 2.5)) if len(boot_auroc) >= 100 else None
-        auroc_ci_hi = float(np.percentile(boot_auroc, 97.5)) if len(boot_auroc) >= 100 else None
-
-        rows.append({
-            "category": cat, "subgroup": sub,
-            "direction_type": dir_type, "granularity": gran,
-            "balanced_accuracy": mean_ba,
-            "auroc": mean_auroc,
-            "ba_ci_low": ba_ci_lo, "ba_ci_high": ba_ci_hi,
-            "auroc_ci_low": auroc_ci_lo, "auroc_ci_high": auroc_ci_hi,
-            "n_a": int((y == 1).sum()), "n_b": int((y == 0).sum()),
-            "n_cv_folds": len(fold_ba),
-            "n_bootstrap_success": len(boot_ba),
-        })
+        else:
+            row.update(result)
+            row["status"] = "ok"
+        rows.append(row)
 
     return rows
 
@@ -1305,11 +1358,12 @@ def main() -> None:
 
     # ── Probes ──────────────────────────────────────────────────────────
     log("\nComputing probes...")
-    probe_rows = compute_probes(
+    probe_rows = run_all_probes(
         directions, hidden_states, qi_map,
         n_folds=args.n_cv_folds,
         n_bootstrap=args.n_bootstrap,
         seed=args.random_seed,
+        max_iter=args.probe_max_iter,
     )
     probes_df = pd.DataFrame(probe_rows)
     if not probes_df.empty:
