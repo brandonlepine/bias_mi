@@ -161,6 +161,10 @@ def parse_args() -> argparse.Namespace:
                    choices=["auto", "config_key", "default_path"])
     p.add_argument("--force", action="store_true")
     p.add_argument("--skip_probes", action="store_true")
+    p.add_argument("--probes_only", action="store_true",
+                   help="Load existing directions, run only the probe stage")
+    p.add_argument("--regenerate_outputs", action="store_true",
+                   help="Regenerate figures + summary JSONs from existing parquets only")
     return p.parse_args()
 
 
@@ -219,9 +223,10 @@ def preflight(run_dir: Path, args: argparse.Namespace) -> None:
     # Output dir
     output_dir = run_dir / "stage1_geometry_v3"
     if output_dir.exists() and not args.force:
-        log(f"ERROR: Output directory already exists: {output_dir}")
-        log("Use --force to overwrite.")
-        sys.exit(1)
+        if not (args.probes_only or args.regenerate_outputs):
+            log(f"ERROR: Output directory already exists: {output_dir}")
+            log("Use --force to overwrite, or --probes_only / --regenerate_outputs.")
+            sys.exit(1)
 
     # Disk space
     usage = shutil.disk_usage(run_dir)
@@ -926,10 +931,11 @@ def make_probe_pipeline(seed: int, max_iter: int = 1000) -> Pipeline:
     ])
 
 
-def load_probe_progress(path: Path) -> dict[tuple, dict]:
+def load_probe_progress(path: Path) -> dict[tuple, list[dict]]:
+    """Load completed probes from JSONL. Returns {(cat,gran,sub,dt,layer): [rows]}."""
     if not path.exists():
         return {}
-    completed: dict[tuple, dict] = {}
+    completed: dict[tuple, list[dict]] = defaultdict(list)
     with open(path) as f:
         for line in f:
             line = line.strip()
@@ -939,10 +945,10 @@ def load_probe_progress(path: Path) -> dict[tuple, dict]:
                 row = json.loads(line)
                 key = (row["category"], row["granularity"], row["subgroup"],
                        row["direction_type"], row["layer"])
-                completed[key] = row
+                completed[key].append(row)
             except (json.JSONDecodeError, KeyError):
                 continue
-    return completed
+    return dict(completed)
 
 
 def append_probe_result(path: Path, row: dict) -> None:
@@ -962,11 +968,15 @@ def run_all_probes(
     n_folds: int = 5,
     seed: int = 42,
 ) -> list[dict]:
-    """Run probes with JSONL checkpointing."""
-    progress_path = output_dir / "_probe_progress.jsonl"
+    """Run probes with per-layer JSONL checkpointing.
+
+    Each layer gets its own checkpoint file so layers don't collide.
+    Both per-fold rows AND mean rows are checkpointed.
+    """
+    progress_path = output_dir / f"_probe_progress_L{layer}.jsonl"
     completed = load_probe_progress(progress_path)
     if completed:
-        log(f"  Resuming: {len(completed)} probes already completed")
+        log(f"  Resuming L{layer}: {len(completed)} probe directions already completed")
 
     # Build question_index lookup from unified items
     qi_lookup: dict[int, int] = {}
@@ -975,12 +985,15 @@ def run_all_probes(
             qi = r.get("question_index", "0")
             qi_lookup[r["item_idx"]] = int(qi) if str(qi).isdigit() else hash(qi) % 10000
 
-    rows: list[dict] = list(completed.values())
+    # Start with previously completed rows
+    rows: list[dict] = []
+    for ckpt_key, ckpt_rows in completed.items():
+        rows.extend(ckpt_rows)
     skipped = 0
 
     computable_keys = [k for k, v in status_map.items() if v["status"] == S.COMPUTABLE]
 
-    for key in tqdm(computable_keys, desc="  Probes", unit="probe"):
+    for key in tqdm(computable_keys, desc=f"  Probes L{layer}", unit="probe"):
         cat, gran, sub, dir_type = key
         ckpt_key = (cat, gran, sub, dir_type, layer)
         if ckpt_key in completed:
@@ -1003,19 +1016,21 @@ def run_all_probes(
                 y_list.append(0)
                 groups.append(qi_lookup.get(idx, idx))
 
-        row: dict[str, Any] = {
+        row_base: dict[str, Any] = {
             "category": cat, "granularity": gran, "subgroup": sub,
             "direction_type": dir_type, "layer": layer,
         }
 
         if len(X_list) < 20:
-            row.update({"auroc": None, "auroc_ci_low": None, "auroc_ci_high": None,
-                        "n_train": 0, "n_test": 0, "status": S.INSUFFICIENT_ITEMS,
-                        "fold_idx": -1,
-                        "group_a_train": 0, "group_b_train": 0,
-                        "group_a_test": 0, "group_b_test": 0})
-            append_probe_result(progress_path, row)
-            rows.append(row)
+            skip_row = {
+                **row_base, "auroc": None, "auroc_ci_low": None,
+                "auroc_ci_high": None, "n_train": 0, "n_test": 0,
+                "status": S.INSUFFICIENT_ITEMS, "fold_idx": -1,
+                "group_a_train": 0, "group_b_train": 0,
+                "group_a_test": 0, "group_b_test": 0,
+            }
+            append_probe_result(progress_path, skip_row)
+            rows.append(skip_row)
             continue
 
         X = np.stack(X_list).astype(np.float32)
@@ -1025,17 +1040,20 @@ def run_all_probes(
         n_groups = len(np.unique(g))
         eff_folds = min(n_folds, n_groups)
         if eff_folds < 2:
-            row.update({"auroc": None, "auroc_ci_low": None, "auroc_ci_high": None,
-                        "n_train": len(X), "n_test": 0,
-                        "status": S.INSUFFICIENT_ITEMS, "fold_idx": -1,
-                        "group_a_train": 0, "group_b_train": 0,
-                        "group_a_test": 0, "group_b_test": 0})
-            append_probe_result(progress_path, row)
-            rows.append(row)
+            skip_row = {
+                **row_base, "auroc": None, "auroc_ci_low": None,
+                "auroc_ci_high": None, "n_train": len(X), "n_test": 0,
+                "status": S.INSUFFICIENT_ITEMS, "fold_idx": -1,
+                "group_a_train": 0, "group_b_train": 0,
+                "group_a_test": 0, "group_b_test": 0,
+            }
+            append_probe_result(progress_path, skip_row)
+            rows.append(skip_row)
             continue
 
         gkf = GroupKFold(n_splits=eff_folds)
         fold_aurocs: list[float] = []
+        direction_rows: list[dict] = []
 
         for fold_i, (tr, te) in enumerate(gkf.split(X, y, g)):
             if len(np.unique(y[tr])) < 2 or len(np.unique(y[te])) < 2:
@@ -1048,34 +1066,38 @@ def run_all_probes(
                 fold_aurocs.append(auroc)
 
                 fold_row = {
-                    **row, "fold_idx": fold_i, "auroc": auroc,
+                    **row_base, "fold_idx": fold_i, "auroc": auroc,
                     "auroc_ci_low": None, "auroc_ci_high": None,
-                    "n_train": len(tr), "n_test": len(te),
+                    "n_train": int(len(tr)), "n_test": int(len(te)),
                     "group_a_train": int((y[tr] == 1).sum()),
                     "group_b_train": int((y[tr] == 0).sum()),
                     "group_a_test": int((y[te] == 1).sum()),
                     "group_b_test": int((y[te] == 0).sum()),
                     "status": S.COMPUTABLE,
                 }
-                rows.append(fold_row)
+                direction_rows.append(fold_row)
             except Exception:
                 continue
 
         # Mean row
         mean_auroc = float(np.mean(fold_aurocs)) if fold_aurocs else None
         mean_row = {
-            **row, "fold_idx": -1, "auroc": mean_auroc,
+            **row_base, "fold_idx": -1, "auroc": mean_auroc,
             "auroc_ci_low": None, "auroc_ci_high": None,
-            "n_train": len(X), "n_test": 0,
+            "n_train": int(len(X)), "n_test": int(sum(len(te) for _, te in gkf.split(X, y, g)) // eff_folds) if fold_aurocs else 0,
             "group_a_train": int((y == 1).sum()),
             "group_b_train": int((y == 0).sum()),
             "group_a_test": 0, "group_b_test": 0,
             "status": S.COMPUTABLE if fold_aurocs else S.INSUFFICIENT_ITEMS,
         }
-        append_probe_result(progress_path, mean_row)
-        rows.append(mean_row)
+        direction_rows.append(mean_row)
 
-    log(f"  Probes complete: {len(rows)} total rows, {skipped} resumed")
+        # Checkpoint ALL rows for this direction atomically
+        for dr in direction_rows:
+            append_probe_result(progress_path, dr)
+        rows.extend(direction_rows)
+
+    log(f"  Probes L{layer} complete: {len(rows)} total rows, {skipped} resumed")
     return rows
 
 
@@ -1647,6 +1669,108 @@ def self_validate(
 # 12. Main
 # ===================================================================
 
+def _load_common_data(args: argparse.Namespace, run_dir: Path) -> tuple[
+    dict, list[str], dict, dict, dict, Path, pd.DataFrame, dict,
+]:
+    """Load data shared across all modes. Returns (config, categories,
+    enriched_by_cat, bridges, rev_bridges, act_dir, predictions_df,
+    enrichment_audit)."""
+    config: dict = {}
+    config_path = run_dir / "config.json"
+    if config_path.is_file():
+        with open(config_path) as f:
+            config = json.load(f)
+        log(f"  Loaded config.json")
+    else:
+        log(f"  WARNING: config.json not found at {config_path}")
+
+    enriched_dir = run_dir / "data" / "enriched"
+    categories = list(ENRICHED_CATEGORIES)
+
+    log("\nLoading enriched JSONL files...")
+    enriched_by_cat = load_enriched_jsonl(enriched_dir, categories, args.race_handling)
+
+    log("\nLoading stimuli bridges...")
+    bridges = load_stimuli_bridges(run_dir, categories)
+    rev_bridges = build_reverse_bridges(bridges)
+
+    log("\nDetecting activations directory...")
+    act_dir = detect_activations_dir(run_dir, config, args.activations_layout)
+
+    log("\nDetecting predictions source...")
+    pred_type, pred_path = detect_predictions_source(run_dir, args.predictions_source)
+    predictions_df = load_predictions(pred_type, pred_path)
+    log(f"  Loaded {len(predictions_df)} prediction rows")
+
+    with open(enriched_dir / "enrichment_audit.json") as f:
+        enrichment_audit = json.load(f)
+
+    return (config, categories, enriched_by_cat, bridges, rev_bridges,
+            act_dir, predictions_df, enrichment_audit)
+
+
+def _generate_post_outputs(
+    output_dir: Path, all_summary_rows: list[dict], all_cos_rows: list[dict],
+    all_align_rows: list[dict], all_probe_rows: list[dict],
+    global_status_map: dict[DirectionKey, dict], enrichment_audit: dict,
+    categories: list[str], layers: list[int], primary_layer: int,
+    race_handling: str, min_n: int,
+) -> dict:
+    """Generate summary JSONs, figures, and run validation. Returns discrepancy."""
+    # ── Summary JSONs ───────────────────────────────────────────────────
+    log("\nBuilding summaries...")
+    summary = build_geometry_summary(
+        all_summary_rows, all_cos_rows, all_align_rows, all_probe_rows,
+        layers, primary_layer, race_handling, min_n,
+    )
+    atomic_save_json(summary, output_dir / "geometry_summary.json")
+
+    status_inv = {
+        f"{cat}__{gran}__{sub}__{dt}": {
+            "status": info["status"], "reason": info["reason"],
+            "n_a": info["n_a"], "n_b": info["n_b"],
+        }
+        for (cat, gran, sub, dt), info in global_status_map.items()
+    }
+    atomic_save_json(status_inv, output_dir / "status_inventory.json")
+
+    discrepancy = build_audit_discrepancy(global_status_map, enrichment_audit)
+    atomic_save_json(discrepancy, output_dir / "audit_discrepancy_report.json")
+
+    log(f"\nAudit discrepancy: "
+        f"{discrepancy['n_audit_says_computable_but_script_failed']} audit-yes/script-no, "
+        f"{discrepancy['n_audit_says_uncomputable_but_script_succeeded']} audit-no/script-yes")
+    if discrepancy["discrepancies"]:
+        for d in discrepancy["discrepancies"][:10]:
+            log(f"  {d['category']}/{d['subgroup']}/{d['direction_type']} "
+                f"[{d['granularity']}]: audit={d['audit_says']}, "
+                f"script={d['script_status']}")
+
+    log("\n" + "=" * 72)
+    log("GEOMETRY SUMMARY")
+    log("=" * 72)
+    for cat, cat_info in summary.get("per_category", {}).items():
+        for gran, ginfo in cat_info.items():
+            log(f"\n  {cat} [{gran}]:")
+            for k, v in ginfo.items():
+                log(f"    {k}: {v}")
+
+    # ── Figures ─────────────────────────────────────────────────────────
+    log("\nGenerating figures...")
+    try:
+        generate_all_figures(
+            all_cos_rows, all_align_rows, all_summary_rows, all_probe_rows,
+            global_status_map, categories, primary_layer,
+            output_dir / "figures",
+        )
+    except Exception as e:
+        log(f"  ERROR during figure generation: {e}")
+        import traceback
+        traceback.print_exc()
+
+    return discrepancy
+
+
 def main() -> None:
     args = parse_args()
     run_dir = Path(args.run_dir)
@@ -1660,6 +1784,12 @@ def main() -> None:
     log(f"  Layers: {layers} (primary: {primary_layer})")
     log(f"  Min N: {args.min_n}")
     log(f"  Race handling: {args.race_handling}")
+    if args.probes_only:
+        log(f"  Mode: PROBES ONLY")
+    elif args.regenerate_outputs:
+        log(f"  Mode: REGENERATE OUTPUTS ONLY")
+    else:
+        log(f"  Mode: FULL PIPELINE")
 
     # ── Pre-flight ──────────────────────────────────────────────────────
     preflight(run_dir, args)
@@ -1668,52 +1798,136 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "checkpoints").mkdir(exist_ok=True)
     (output_dir / "figures").mkdir(exist_ok=True)
-
-    # Logs dir
     (run_dir / "logs").mkdir(exist_ok=True)
 
-    # ── Load config ─────────────────────────────────────────────────────
-    config: dict = {}
-    config_path = run_dir / "config.json"
-    if config_path.is_file():
-        with open(config_path) as f:
-            config = json.load(f)
-        log(f"  Loaded config.json")
-    else:
-        log(f"  WARNING: config.json not found at {config_path}")
+    # ================================================================
+    # MODE: --regenerate_outputs
+    # ================================================================
+    if args.regenerate_outputs:
+        log("\nRegenerate mode: loading existing parquets...")
+        enriched_dir = run_dir / "data" / "enriched"
+        categories = list(ENRICHED_CATEGORIES)
 
-    # ── Load enriched data ──────────────────────────────────────────────
-    log("\nLoading enriched JSONL files...")
-    enriched_dir = run_dir / "data" / "enriched"
-    categories = list(ENRICHED_CATEGORIES)
-    enriched_by_cat = load_enriched_jsonl(enriched_dir, categories, args.race_handling)
+        # Load parquets
+        all_summary_rows = pd.read_parquet(
+            output_dir / "directions_summary.parquet").to_dict("records")
+        all_cos_rows = pd.read_parquet(
+            output_dir / "pairwise_cosines.parquet").to_dict("records")
+        all_align_rows = pd.read_parquet(
+            output_dir / "direction_alignment.parquet").to_dict("records")
 
-    # ── Load stimuli bridges ────────────────────────────────────────────
-    log("\nLoading stimuli bridges...")
-    bridges = load_stimuli_bridges(run_dir, categories)
-    rev_bridges = build_reverse_bridges(bridges)
+        probe_path = output_dir / "probe_accuracies.parquet"
+        all_probe_rows = pd.read_parquet(probe_path).to_dict("records") if probe_path.exists() else []
 
-    # ── Detect activations ──────────────────────────────────────────────
-    log("\nDetecting activations directory...")
-    act_dir = detect_activations_dir(run_dir, config, args.activations_layout)
+        with open(enriched_dir / "enrichment_audit.json") as f:
+            enrichment_audit = json.load(f)
 
-    # ── Detect predictions ──────────────────────────────────────────────
-    log("\nDetecting predictions source...")
-    pred_type, pred_path = detect_predictions_source(run_dir, args.predictions_source)
-    predictions_df = load_predictions(pred_type, pred_path)
-    log(f"  Loaded {len(predictions_df)} prediction rows")
+        # Rebuild status map from directions_summary
+        global_status_map: dict[DirectionKey, dict] = {}
+        for row in all_summary_rows:
+            key = (row["category"], row["granularity"], row["subgroup"], row["direction_type"])
+            global_status_map[key] = {
+                "status": row["status"], "n_a": row.get("group_a_n", 0),
+                "n_b": row.get("group_b_n", 0), "reason": row["status"],
+                "group_a_idxs": [], "group_b_idxs": [],
+            }
 
-    # ── Build unified items ─────────────────────────────────────────────
+        discrepancy = _generate_post_outputs(
+            output_dir, all_summary_rows, all_cos_rows, all_align_rows,
+            all_probe_rows, global_status_map, enrichment_audit,
+            categories, layers, primary_layer, args.race_handling, args.min_n,
+        )
+
+        all_pass = self_validate(
+            output_dir, all_cos_rows, all_summary_rows, global_status_map,
+            categories, primary_layer, discrepancy,
+        )
+        elapsed = time.time() - t0
+        log(f"\nRegenerate complete in {elapsed:.1f}s")
+        if not all_pass:
+            sys.exit(1)
+        return
+
+    # ================================================================
+    # Shared data loading (full mode and probes_only)
+    # ================================================================
+    (config, categories, enriched_by_cat, bridges, rev_bridges,
+     act_dir, predictions_df, enrichment_audit) = _load_common_data(args, run_dir)
+
     log("\nBuilding unified item table...")
     unified_items = build_unified_items(
         enriched_by_cat, rev_bridges, predictions_df, categories,
     )
 
-    # ── Load enrichment audit ───────────────────────────────────────────
-    with open(enriched_dir / "enrichment_audit.json") as f:
-        enrichment_audit = json.load(f)
+    # ================================================================
+    # MODE: --probes_only
+    # ================================================================
+    if args.probes_only:
+        log("\nProbes-only mode: loading existing direction outputs...")
 
-    # ── Per-layer computation ───────────────────────────────────────────
+        # Load existing parquets
+        all_summary_rows = pd.read_parquet(
+            output_dir / "directions_summary.parquet").to_dict("records")
+        all_cos_rows = pd.read_parquet(
+            output_dir / "pairwise_cosines.parquet").to_dict("records")
+        all_align_rows = pd.read_parquet(
+            output_dir / "direction_alignment.parquet").to_dict("records")
+
+        # Rebuild status map from metadata (need group_a/b_idxs for probes)
+        log("  Rebuilding status map...")
+        global_status_map = determine_all_statuses(
+            unified_items, categories, args.min_n, enrichment_audit,
+        )
+
+        # Delete stale probe JSONL files so we start clean
+        for old_jsonl in output_dir.glob("_probe_progress_L*.jsonl"):
+            old_jsonl.unlink()
+            log(f"  Deleted stale {old_jsonl.name}")
+        old_flat = output_dir / "_probe_progress.jsonl"
+        if old_flat.exists():
+            old_flat.unlink()
+            log(f"  Deleted stale _probe_progress.jsonl")
+
+        # Run probes — one layer at a time, no duplicate
+        all_probe_rows: list[dict] = []
+        for layer in layers:
+            log(f"\nLoading hidden states for L{layer}...")
+            hs = load_layer_hidden_states(act_dir, categories, layer, bridges)
+            log(f"  Loaded {len(hs)} items")
+            probe_rows = run_all_probes(
+                global_status_map, hs, unified_items, output_dir,
+                layer=layer, n_folds=args.probe_n_folds, seed=42,
+            )
+            all_probe_rows.extend(probe_rows)
+            del hs
+
+        probes_df = pd.DataFrame(all_probe_rows)
+        if not probes_df.empty:
+            tmp = output_dir / ".probe_accuracies.parquet.tmp"
+            probes_df.to_parquet(tmp, index=False, compression="snappy")
+            os.rename(tmp, output_dir / "probe_accuracies.parquet")
+        log(f"\n  Saved probe_accuracies.parquet: {len(probes_df)} rows")
+
+        # Regenerate all post-outputs (figures, summaries)
+        discrepancy = _generate_post_outputs(
+            output_dir, all_summary_rows, all_cos_rows, all_align_rows,
+            all_probe_rows, global_status_map, enrichment_audit,
+            categories, layers, primary_layer, args.race_handling, args.min_n,
+        )
+
+        all_pass = self_validate(
+            output_dir, all_cos_rows, all_summary_rows, global_status_map,
+            categories, primary_layer, discrepancy,
+        )
+        elapsed = time.time() - t0
+        log(f"\nProbes-only complete in {elapsed:.1f}s")
+        if not all_pass:
+            sys.exit(1)
+        return
+
+    # ================================================================
+    # MODE: FULL PIPELINE
+    # ================================================================
     all_summary_rows: list[dict] = []
     all_cos_rows: list[dict] = []
     all_align_rows: list[dict] = []
@@ -1724,7 +1938,6 @@ def main() -> None:
         ckpt_path = output_dir / "checkpoints" / f"layer_{layer}_done.json"
         if ckpt_path.exists() and not args.force:
             log(f"\nLayer {layer}: LOADED from checkpoint")
-            # Load saved results
             ckpt_summary = output_dir / "checkpoints" / f"summary_L{layer}.parquet"
             ckpt_cos = output_dir / "checkpoints" / f"cosines_L{layer}.parquet"
             ckpt_align = output_dir / "checkpoints" / f"alignment_L{layer}.parquet"
@@ -1740,7 +1953,6 @@ def main() -> None:
         log(f"Layer {layer}")
         log(f"{'=' * 60}")
 
-        # Load hidden states
         hs = load_layer_hidden_states(act_dir, categories, layer, bridges)
         log(f"  Loaded hidden states for {len(hs)} items")
 
@@ -1748,7 +1960,6 @@ def main() -> None:
             log("  WARNING: No hidden states loaded for this layer, skipping")
             continue
 
-        # Determine statuses
         log("  Determining direction statuses...")
         status_map = determine_all_statuses(
             unified_items, categories, args.min_n, enrichment_audit,
@@ -1757,24 +1968,19 @@ def main() -> None:
         n_total = len(status_map)
         log(f"  {n_computable}/{n_total} directions computable")
 
-        # Merge into global status map (layer-independent for most purposes)
         global_status_map.update(status_map)
 
-        # Compute directions
         log("  Computing directions...")
         dir_vectors, summary_rows = compute_directions(status_map, hs, layer)
         all_dir_vectors.update(dir_vectors)
         log(f"  {len(dir_vectors)} direction vectors computed")
 
-        # Pairwise cosines
         log("  Computing pairwise cosines...")
         cos_rows = compute_pairwise_cosines(dir_vectors, status_map, layer)
 
-        # Alignment
         log("  Computing cross-type alignment...")
         align_rows = compute_alignment(dir_vectors, status_map, layer)
 
-        # Save per-layer checkpoints
         pd.DataFrame(summary_rows).to_parquet(
             output_dir / "checkpoints" / f"summary_L{layer}.parquet", index=False)
         pd.DataFrame(cos_rows).to_parquet(
@@ -1789,12 +1995,10 @@ def main() -> None:
         all_cos_rows.extend(cos_rows)
         all_align_rows.extend(align_rows)
 
-        # Free hidden states memory
         del hs
 
-    # ── Save consolidated outputs ───────────────────────────────────────
+    # Save consolidated direction outputs
     log("\nSaving consolidated outputs...")
-
     dirs_df = pd.DataFrame(all_summary_rows)
     tmp = output_dir / ".directions_summary.parquet.tmp"
     dirs_df.to_parquet(tmp, index=False, compression="snappy")
@@ -1810,10 +2014,9 @@ def main() -> None:
     align_df.to_parquet(tmp, index=False, compression="snappy")
     os.rename(tmp, output_dir / "direction_alignment.parquet")
 
-    # Save directions.npz
     save_directions_npz(all_dir_vectors, output_dir)
 
-    # ── Probes ──────────────────────────────────────────────────────────
+    # Probes — single pass, one layer at a time
     all_probe_rows: list[dict] = []
     if not args.skip_probes:
         log("\nComputing probes...")
@@ -1831,56 +2034,15 @@ def main() -> None:
             tmp = output_dir / ".probe_accuracies.parquet.tmp"
             probes_df.to_parquet(tmp, index=False, compression="snappy")
             os.rename(tmp, output_dir / "probe_accuracies.parquet")
-        log(f"  Saved probe_accuracies: {len(probes_df)} rows")
+        log(f"  Saved probe_accuracies.parquet: {len(probes_df)} rows")
 
-    # ── Summary ─────────────────────────────────────────────────────────
-    log("\nBuilding summaries...")
-    summary = build_geometry_summary(
-        all_summary_rows, all_cos_rows, all_align_rows, all_probe_rows,
-        layers, primary_layer, args.race_handling, args.min_n,
-    )
-    atomic_save_json(summary, output_dir / "geometry_summary.json")
-
-    # Status inventory
-    status_inv = {
-        f"{cat}__{gran}__{sub}__{dt}": {"status": info["status"], "reason": info["reason"],
-                                         "n_a": info["n_a"], "n_b": info["n_b"]}
-        for (cat, gran, sub, dt), info in global_status_map.items()
-    }
-    atomic_save_json(status_inv, output_dir / "status_inventory.json")
-
-    # Audit discrepancy
-    discrepancy = build_audit_discrepancy(global_status_map, enrichment_audit)
-    atomic_save_json(discrepancy, output_dir / "audit_discrepancy_report.json")
-
-    log(f"\nAudit discrepancy: "
-        f"{discrepancy['n_audit_says_computable_but_script_failed']} audit-yes/script-no, "
-        f"{discrepancy['n_audit_says_uncomputable_but_script_succeeded']} audit-no/script-yes")
-    if discrepancy["discrepancies"]:
-        for d in discrepancy["discrepancies"][:10]:
-            log(f"  {d['category']}/{d['subgroup']}/{d['direction_type']} "
-                f"[{d['granularity']}]: audit={d['audit_says']}, "
-                f"script={d['script_status']}")
-
-    # Print summary
-    log("\n" + "=" * 72)
-    log("GEOMETRY SUMMARY")
-    log("=" * 72)
-    for cat, cat_info in summary.get("per_category", {}).items():
-        for gran, ginfo in cat_info.items():
-            log(f"\n  {cat} [{gran}]:")
-            for k, v in ginfo.items():
-                log(f"    {k}: {v}")
-
-    # ── Figures ─────────────────────────────────────────────────────────
-    log("\nGenerating figures...")
-    generate_all_figures(
-        all_cos_rows, all_align_rows, all_summary_rows, all_probe_rows,
-        global_status_map, categories, primary_layer,
-        output_dir / "figures",
+    # Post-outputs (summaries, figures) — always run
+    discrepancy = _generate_post_outputs(
+        output_dir, all_summary_rows, all_cos_rows, all_align_rows,
+        all_probe_rows, global_status_map, enrichment_audit,
+        categories, layers, primary_layer, args.race_handling, args.min_n,
     )
 
-    # ── Self-validation ─────────────────────────────────────────────────
     all_pass = self_validate(
         output_dir, all_cos_rows, all_summary_rows, global_status_map,
         categories, primary_layer, discrepancy,
