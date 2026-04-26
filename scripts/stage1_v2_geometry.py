@@ -115,8 +115,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--categories", type=str, default=None,
                    help="Comma-separated subset of categories (short names)")
     p.add_argument("--min_n_per_group", type=int, default=10)
-    p.add_argument("--n_bootstrap", type=int, default=100,
-                   help="Bootstrap iterations for CIs; set to 0 to skip")
+    p.add_argument("--n_bootstrap", type=int, default=0,
+                   help="Bootstrap iterations for CIs; default 0 (skip). "
+                        "Set to 100 only when CIs are needed for final figures.")
     p.add_argument("--n_cv_folds", type=int, default=5)
     p.add_argument("--random_seed", type=int, default=42)
     p.add_argument("--probe_max_iter", type=int, default=200,
@@ -776,11 +777,11 @@ def compute_directional_probe(
     mean_ba = float(np.mean(fold_ba))
     mean_auroc = float(np.mean(fold_auroc))
 
-    # Bootstrap CIs
+    # Bootstrap CIs (skipped entirely when n_bootstrap == 0)
     boot_ba: list[float] = []
     boot_auroc: list[float] = []
 
-    for _ in range(n_bootstrap):
+    for _ in range(n_bootstrap):  # noqa: no-op when n_bootstrap == 0
         bi = rng.choice(len(X), size=len(X), replace=True)
         Xb, yb, gb = X[bi], y[bi], g[bi]
         if len(np.unique(yb)) < 2:
@@ -828,21 +829,82 @@ def compute_directional_probe(
     }
 
 
+def _json_safe(obj: Any) -> Any:
+    """JSON serializer for numpy scalars."""
+    if isinstance(obj, (np.integer,)):
+        return int(obj)
+    if isinstance(obj, (np.floating,)):
+        return float(obj) if not np.isnan(obj) else None
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    raise TypeError(f"Not JSON serializable: {type(obj)}")
+
+
+def load_probe_progress(progress_path: Path) -> dict[tuple, dict]:
+    """Load already-completed probes from JSONL. Returns dict keyed by
+    (category, subgroup, direction_type, granularity)."""
+    if not progress_path.exists():
+        return {}
+    completed: dict[tuple, dict] = {}
+    with open(progress_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+                key = (row["category"], row["subgroup"],
+                       row["direction_type"], row["granularity"])
+                completed[key] = row
+            except (json.JSONDecodeError, KeyError):
+                continue
+    return completed
+
+
+def append_probe_result(progress_path: Path, row: dict) -> None:
+    """Append a single probe result to the JSONL progress file."""
+    progress_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(progress_path, "a") as f:
+        f.write(json.dumps(row, default=_json_safe) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
+
+
 def run_all_probes(
     directions: dict[DirectionKey, dict],
     hidden_states: dict[int, np.ndarray],
     qi_map: dict[int, int],
+    output_dir: Path,
+    layer: int = 14,
     n_folds: int = 5,
-    n_bootstrap: int = 100,
+    n_bootstrap: int = 0,
     seed: int = 42,
     max_iter: int = 200,
 ) -> list[dict]:
-    """Run probes for all directions. Returns rows for probe_accuracies.parquet."""
-    rows: list[dict] = []
+    """Run probes for all directions with JSONL incremental checkpointing.
 
+    Completed probes are appended to _probe_progress.jsonl as they finish.
+    On restart, already-completed probes are loaded and skipped.
+    """
+    progress_path = output_dir / "_probe_progress.jsonl"
+    completed = load_probe_progress(progress_path)
+
+    if completed:
+        log(f"  Resuming: {len(completed)} probes already completed in "
+            f"{progress_path.name}")
+
+    rows: list[dict] = list(completed.values())
+    skipped = 0
+
+    items = list(directions.items())
     for (cat, sub, dir_type, gran), info in tqdm(
-        directions.items(), desc="  Probes", unit="probe",
+        items, desc="  Probes", unit="probe",
     ):
+        key = (cat, sub, dir_type, gran)
+        if key in completed:
+            skipped += 1
+            continue
+
         result = compute_directional_probe(
             hidden_states,
             info["group_a_idxs"],
@@ -857,6 +919,7 @@ def run_all_probes(
         row: dict[str, Any] = {
             "category": cat, "subgroup": sub,
             "direction_type": dir_type, "granularity": gran,
+            "layer": layer,
         }
         if result is None:
             row.update({
@@ -870,8 +933,12 @@ def run_all_probes(
         else:
             row.update(result)
             row["status"] = "ok"
+
+        # Persist immediately
+        append_probe_result(progress_path, row)
         rows.append(row)
 
+    log(f"  Probes complete: {len(rows)} total, {skipped} resumed from disk")
     return rows
 
 
@@ -1319,47 +1386,75 @@ def main() -> None:
         log("FATAL: No hidden states loaded. Ensure A_extraction/activations/ exists.")
         sys.exit(1)
 
-    # ── Compute directions ──────────────────────────────────────────────
-    log(f"\nComputing directions...")
-    directions, summary_rows = compute_directions(
-        meta_df, hidden_states, categories_short,
-        args.layer, args.min_n_per_group,
+    # ── Compute or reload directions / cosines / alignment ───────────────
+    directions_path = output_dir / "directions_summary.parquet"
+    cosines_path = output_dir / "pairwise_cosines.parquet"
+    alignment_path = output_dir / "direction_alignment.parquet"
+
+    resume_directions = (
+        directions_path.exists()
+        and cosines_path.exists()
+        and alignment_path.exists()
     )
 
-    # Save direction vectors
-    save_direction_vectors(directions, output_dir, args.layer)
+    if resume_directions:
+        log("\nFound existing direction outputs; skipping direction computation.")
+        log(f"  {directions_path.name}, {cosines_path.name}, {alignment_path.name}")
+        log(f"  If you want to recompute, delete those files first.")
 
-    # Save directions summary
-    dirs_df = pd.DataFrame(summary_rows)
-    tmp = output_dir / ".directions_summary.parquet.tmp"
-    dirs_df.to_parquet(tmp, index=False, compression="snappy")
-    os.rename(tmp, output_dir / "directions_summary.parquet")
-    log(f"  Saved directions_summary: {len(dirs_df)} rows")
+        dirs_df = pd.read_parquet(directions_path)
+        cos_df = pd.read_parquet(cosines_path)
+        align_df = pd.read_parquet(alignment_path)
+        summary_rows = dirs_df.to_dict("records")
 
-    # ── Pairwise cosines ────────────────────────────────────────────────
-    log("\nComputing pairwise cosines...")
-    cos_rows = compute_pairwise_cosines(directions, args.layer)
-    cos_df = pd.DataFrame(cos_rows)
-    if not cos_df.empty:
-        tmp = output_dir / ".pairwise_cosines.parquet.tmp"
-        cos_df.to_parquet(tmp, index=False, compression="snappy")
-        os.rename(tmp, output_dir / "pairwise_cosines.parquet")
-    log(f"  Saved pairwise_cosines: {len(cos_df)} rows")
+        # Rebuild the directions dict with group indices for the probe loop.
+        # Group indices come from metadata, same logic as compute_directions.
+        log("\nRebuilding direction groups from metadata for probe phase...")
+        directions, _ = compute_directions(
+            meta_df, hidden_states, categories_short,
+            args.layer, args.min_n_per_group,
+        )
+        log(f"  Rebuilt {len(directions)} direction group specs")
 
-    # ── Cross-type alignment ────────────────────────────────────────────
-    log("\nComputing cross-type alignment...")
-    align_rows = compute_direction_alignment(directions)
-    align_df = pd.DataFrame(align_rows)
-    if not align_df.empty:
-        tmp = output_dir / ".direction_alignment.parquet.tmp"
-        align_df.to_parquet(tmp, index=False, compression="snappy")
-        os.rename(tmp, output_dir / "direction_alignment.parquet")
-    log(f"  Saved direction_alignment: {len(align_df)} rows")
+    else:
+        log(f"\nComputing directions from scratch...")
+        directions, summary_rows = compute_directions(
+            meta_df, hidden_states, categories_short,
+            args.layer, args.min_n_per_group,
+        )
+
+        save_direction_vectors(directions, output_dir, args.layer)
+
+        dirs_df = pd.DataFrame(summary_rows)
+        tmp = output_dir / ".directions_summary.parquet.tmp"
+        dirs_df.to_parquet(tmp, index=False, compression="snappy")
+        os.rename(tmp, output_dir / "directions_summary.parquet")
+        log(f"  Saved directions_summary: {len(dirs_df)} rows")
+
+        log("\nComputing pairwise cosines...")
+        cos_rows = compute_pairwise_cosines(directions, args.layer)
+        cos_df = pd.DataFrame(cos_rows)
+        if not cos_df.empty:
+            tmp = output_dir / ".pairwise_cosines.parquet.tmp"
+            cos_df.to_parquet(tmp, index=False, compression="snappy")
+            os.rename(tmp, output_dir / "pairwise_cosines.parquet")
+        log(f"  Saved pairwise_cosines: {len(cos_df)} rows")
+
+        log("\nComputing cross-type alignment...")
+        align_rows = compute_direction_alignment(directions)
+        align_df = pd.DataFrame(align_rows)
+        if not align_df.empty:
+            tmp = output_dir / ".direction_alignment.parquet.tmp"
+            align_df.to_parquet(tmp, index=False, compression="snappy")
+            os.rename(tmp, output_dir / "direction_alignment.parquet")
+        log(f"  Saved direction_alignment: {len(align_df)} rows")
 
     # ── Probes ──────────────────────────────────────────────────────────
     log("\nComputing probes...")
     probe_rows = run_all_probes(
         directions, hidden_states, qi_map,
+        output_dir=output_dir,
+        layer=args.layer,
         n_folds=args.n_cv_folds,
         n_bootstrap=args.n_bootstrap,
         seed=args.random_seed,
@@ -1370,7 +1465,7 @@ def main() -> None:
         tmp = output_dir / ".probe_accuracies.parquet.tmp"
         probes_df.to_parquet(tmp, index=False, compression="snappy")
         os.rename(tmp, output_dir / "probe_accuracies.parquet")
-    log(f"  Saved probe_accuracies: {len(probes_df)} rows")
+    log(f"  Saved probe_accuracies: parquet with {len(probes_df)} rows")
 
     # ── Summary ─────────────────────────────────────────────────────────
     log("\nBuilding geometry summary...")
