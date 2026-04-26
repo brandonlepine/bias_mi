@@ -1,0 +1,3823 @@
+{
+  "aggregated": {
+    "age": [
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 1016
+        },
+        "category": "age",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": false,
+          "group_a_count": 1840,
+          "group_b_count": 0
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 1016,
+          "group_b_count": 824
+        },
+        "subgroup": "nonold"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 824
+        },
+        "category": "age",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": false,
+          "group_a_count": 1840,
+          "group_b_count": 0
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 824,
+          "group_b_count": 1016
+        },
+        "subgroup": "old"
+      }
+    ],
+    "disability": [
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 778
+        },
+        "category": "disability",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": false,
+          "group_a_count": 778,
+          "group_b_count": 0
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 778,
+          "group_b_count": 0
+        },
+        "subgroup": "disabled"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "disability",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": false,
+          "group_a_count": 778,
+          "group_b_count": 0
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 778
+        },
+        "subgroup": "nondisabled"
+      }
+    ],
+    "gi": [
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "gi",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 20,
+          "group_b_count": 2816
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 20
+        },
+        "subgroup": "boy"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 1672
+        },
+        "category": "gi",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 2308,
+          "group_b_count": 528
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 1672,
+          "group_b_count": 708
+        },
+        "subgroup": "f"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "gi",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 20,
+          "group_b_count": 2816
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 20
+        },
+        "subgroup": "girl"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 732
+        },
+        "category": "gi",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 2308,
+          "group_b_count": 528
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 732,
+          "group_b_count": 1600
+        },
+        "subgroup": "m"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "gi",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 76,
+          "group_b_count": 2760
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 76
+        },
+        "subgroup": "man"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "gi",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 232,
+          "group_b_count": 2604
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 232
+        },
+        "subgroup": "nontrans"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "gi",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 100,
+          "group_b_count": 2736
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 100
+        },
+        "subgroup": "nontrans_f"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "gi",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 100,
+          "group_b_count": 2736
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 100
+        },
+        "subgroup": "nontrans_m"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 432
+        },
+        "category": "gi",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 232,
+          "group_b_count": 2604
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 432,
+          "group_b_count": 0
+        },
+        "subgroup": "trans"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 416
+        },
+        "category": "gi",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 100,
+          "group_b_count": 2736
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 416,
+          "group_b_count": 0
+        },
+        "subgroup": "trans_f"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 288
+        },
+        "category": "gi",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 100,
+          "group_b_count": 2736
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 288,
+          "group_b_count": 0
+        },
+        "subgroup": "trans_m"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "gi",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 76,
+          "group_b_count": 2760
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 76
+        },
+        "subgroup": "woman"
+      }
+    ],
+    "nationality": [
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 540
+        },
+        "category": "nationality",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 684,
+          "group_b_count": 856
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 540,
+          "group_b_count": 144
+        },
+        "subgroup": "africa"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 184,
+          "group_b_count": 1356
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 184
+        },
+        "subgroup": "arabstates"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 420
+        },
+        "category": "nationality",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 756,
+          "group_b_count": 784
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 420,
+          "group_b_count": 336
+        },
+        "subgroup": "asiapacific"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 120
+        },
+        "category": "nationality",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 624,
+          "group_b_count": 916
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 120,
+          "group_b_count": 504
+        },
+        "subgroup": "europe"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 296,
+          "group_b_count": 1244
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 296
+        },
+        "subgroup": "latinsouthamerica"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 400
+        },
+        "category": "nationality",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 292,
+          "group_b_count": 1248
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 400,
+          "group_b_count": 92
+        },
+        "subgroup": "middleeast"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 60
+        },
+        "category": "nationality",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 104,
+          "group_b_count": 1436
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 60,
+          "group_b_count": 44
+        },
+        "subgroup": "northamerica"
+      }
+    ],
+    "physical_appearance": [
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 208
+        },
+        "category": "physical_appearance",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 208,
+          "group_b_count": 580
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 208,
+          "group_b_count": 0
+        },
+        "subgroup": "negdress"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "physical_appearance",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 280,
+          "group_b_count": 508
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 280
+        },
+        "subgroup": "nonobese"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "physical_appearance",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 188,
+          "group_b_count": 600
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 188
+        },
+        "subgroup": "notpregnant"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "physical_appearance",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 48,
+          "group_b_count": 740
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 48
+        },
+        "subgroup": "novisibledifference"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 280
+        },
+        "category": "physical_appearance",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 280,
+          "group_b_count": 508
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 280,
+          "group_b_count": 0
+        },
+        "subgroup": "obese"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "physical_appearance",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 208,
+          "group_b_count": 580
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 208
+        },
+        "subgroup": "posdress"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 188
+        },
+        "category": "physical_appearance",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 188,
+          "group_b_count": 600
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 188,
+          "group_b_count": 0
+        },
+        "subgroup": "pregnant"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 64
+        },
+        "category": "physical_appearance",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 64,
+          "group_b_count": 724
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 64,
+          "group_b_count": 0
+        },
+        "subgroup": "short"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "physical_appearance",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 64,
+          "group_b_count": 724
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 64
+        },
+        "subgroup": "tall"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 48
+        },
+        "category": "physical_appearance",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 48,
+          "group_b_count": 740
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 48,
+          "group_b_count": 0
+        },
+        "subgroup": "visibledifference"
+      }
+    ],
+    "race": [
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "race",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 100,
+          "group_b_count": 3340
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 100
+        },
+        "subgroup": "african"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 1880
+        },
+        "category": "race",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 260,
+          "group_b_count": 3180
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 1880,
+          "group_b_count": 20
+        },
+        "subgroup": "africanamerican"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 480
+        },
+        "category": "race",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 1044,
+          "group_b_count": 2396
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 480,
+          "group_b_count": 604
+        },
+        "subgroup": "arab"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 480
+        },
+        "category": "race",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 1032,
+          "group_b_count": 2408
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 480,
+          "group_b_count": 552
+        },
+        "subgroup": "asian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 1880
+        },
+        "category": "race",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 1728,
+          "group_b_count": 1712
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 1880,
+          "group_b_count": 308
+        },
+        "subgroup": "black"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "race",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 64,
+          "group_b_count": 3376
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 64
+        },
+        "subgroup": "caucasian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "race",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 92,
+          "group_b_count": 3348
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 92
+        },
+        "subgroup": "european"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 1000
+        },
+        "category": "race",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 164,
+          "group_b_count": 3276
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 1000,
+          "group_b_count": 64
+        },
+        "subgroup": "hispanic"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 20
+        },
+        "category": "race",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 84,
+          "group_b_count": 3356
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 20,
+          "group_b_count": 64
+        },
+        "subgroup": "jewish"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 1000
+        },
+        "category": "race",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 1176,
+          "group_b_count": 2264
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 1000,
+          "group_b_count": 556
+        },
+        "subgroup": "latino"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 480
+        },
+        "category": "race",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 112,
+          "group_b_count": 3328
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 480,
+          "group_b_count": 72
+        },
+        "subgroup": "middleeastern"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 340
+        },
+        "category": "race",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 120,
+          "group_b_count": 3320
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 340,
+          "group_b_count": 60
+        },
+        "subgroup": "nativeamerican"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 20
+        },
+        "category": "race",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 84,
+          "group_b_count": 3356
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 20,
+          "group_b_count": 64
+        },
+        "subgroup": "roma"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "race",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 68,
+          "group_b_count": 3372
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 68
+        },
+        "subgroup": "southamerican"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "race",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 752,
+          "group_b_count": 2688
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 752
+        },
+        "subgroup": "white"
+      }
+    ],
+    "religion": [
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 60
+        },
+        "category": "religion",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 144,
+          "group_b_count": 456
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 60,
+          "group_b_count": 84
+        },
+        "subgroup": "atheist"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "religion",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 56,
+          "group_b_count": 544
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 56
+        },
+        "subgroup": "buddhist"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 160
+        },
+        "category": "religion",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 132,
+          "group_b_count": 468
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 160,
+          "group_b_count": 52
+        },
+        "subgroup": "catholic"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 120
+        },
+        "category": "religion",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 156,
+          "group_b_count": 444
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 120,
+          "group_b_count": 56
+        },
+        "subgroup": "christian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 60
+        },
+        "category": "religion",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 132,
+          "group_b_count": 468
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 60,
+          "group_b_count": 72
+        },
+        "subgroup": "hindu"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 80
+        },
+        "category": "religion",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 140,
+          "group_b_count": 460
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 80,
+          "group_b_count": 60
+        },
+        "subgroup": "jewish"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 200
+        },
+        "category": "religion",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 132,
+          "group_b_count": 468
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 200,
+          "group_b_count": 32
+        },
+        "subgroup": "mormon"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 200
+        },
+        "category": "religion",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 164,
+          "group_b_count": 436
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 200,
+          "group_b_count": 44
+        },
+        "subgroup": "muslim"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 120
+        },
+        "category": "religion",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 600
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 120,
+          "group_b_count": 0
+        },
+        "subgroup": "orthodox"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "religion",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 72,
+          "group_b_count": 528
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 72
+        },
+        "subgroup": "protestant"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "religion",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 72,
+          "group_b_count": 528
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 72
+        },
+        "subgroup": "sikh"
+      }
+    ],
+    "ses": [
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "ses",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": false,
+          "group_a_count": 3432,
+          "group_b_count": 0
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 3432
+        },
+        "subgroup": "highses"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 3432
+        },
+        "category": "ses",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": false,
+          "group_a_count": 3432,
+          "group_b_count": 0
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 3432,
+          "group_b_count": 0
+        },
+        "subgroup": "lowses"
+      }
+    ],
+    "so": [
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 96
+        },
+        "category": "so",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 188,
+          "group_b_count": 244
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 96,
+          "group_b_count": 92
+        },
+        "subgroup": "bisexual"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 240
+        },
+        "category": "so",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 240,
+          "group_b_count": 192
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 240,
+          "group_b_count": 48
+        },
+        "subgroup": "gay"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 160
+        },
+        "category": "so",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 180,
+          "group_b_count": 252
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 160,
+          "group_b_count": 68
+        },
+        "subgroup": "lesbian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 32
+        },
+        "category": "so",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 140,
+          "group_b_count": 292
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 32,
+          "group_b_count": 108
+        },
+        "subgroup": "pansexual"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "so",
+        "granularity": "aggregated",
+        "mention": {
+          "computable": true,
+          "group_a_count": 116,
+          "group_b_count": 316
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 116
+        },
+        "subgroup": "straight"
+      }
+    ]
+  },
+  "fine": {
+    "age": [
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 1016
+        },
+        "category": "age",
+        "granularity": "fine",
+        "mention": {
+          "computable": false,
+          "group_a_count": 1840,
+          "group_b_count": 0
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 1016,
+          "group_b_count": 824
+        },
+        "subgroup": "nonold"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 824
+        },
+        "category": "age",
+        "granularity": "fine",
+        "mention": {
+          "computable": false,
+          "group_a_count": 1840,
+          "group_b_count": 0
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 824,
+          "group_b_count": 1016
+        },
+        "subgroup": "old"
+      }
+    ],
+    "disability": [
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 192
+        },
+        "category": "disability",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 192,
+          "group_b_count": 586
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 192,
+          "group_b_count": 0
+        },
+        "subgroup": "autistic"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 46
+        },
+        "category": "disability",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 46,
+          "group_b_count": 732
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 46,
+          "group_b_count": 0
+        },
+        "subgroup": "ddeaf"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 260
+        },
+        "category": "disability",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 260,
+          "group_b_count": 518
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 260,
+          "group_b_count": 0
+        },
+        "subgroup": "mentallyill"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "disability",
+        "granularity": "fine",
+        "mention": {
+          "computable": false,
+          "group_a_count": 778,
+          "group_b_count": 0
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 778
+        },
+        "subgroup": "nondisabled"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 40
+        },
+        "category": "disability",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 40,
+          "group_b_count": 738
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 40,
+          "group_b_count": 0
+        },
+        "subgroup": "peoplewithblindnessorlowvision"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 24
+        },
+        "category": "disability",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 24,
+          "group_b_count": 754
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 24,
+          "group_b_count": 0
+        },
+        "subgroup": "peoplewithcognitivedisabilities"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 216
+        },
+        "category": "disability",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 216,
+          "group_b_count": 562
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 216,
+          "group_b_count": 0
+        },
+        "subgroup": "physicallydisabled"
+      }
+    ],
+    "gi": [
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "gi",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 20,
+          "group_b_count": 2816
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 20
+        },
+        "subgroup": "boy"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 1672
+        },
+        "category": "gi",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 2308,
+          "group_b_count": 528
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 1672,
+          "group_b_count": 708
+        },
+        "subgroup": "f"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "gi",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 20,
+          "group_b_count": 2816
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 20
+        },
+        "subgroup": "girl"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 732
+        },
+        "category": "gi",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 2308,
+          "group_b_count": 528
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 732,
+          "group_b_count": 1600
+        },
+        "subgroup": "m"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "gi",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 76,
+          "group_b_count": 2760
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 76
+        },
+        "subgroup": "man"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "gi",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 232,
+          "group_b_count": 2604
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 232
+        },
+        "subgroup": "nontrans"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "gi",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 100,
+          "group_b_count": 2736
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 100
+        },
+        "subgroup": "nontrans_f"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "gi",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 100,
+          "group_b_count": 2736
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 100
+        },
+        "subgroup": "nontrans_m"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 432
+        },
+        "category": "gi",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 232,
+          "group_b_count": 2604
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 432,
+          "group_b_count": 0
+        },
+        "subgroup": "trans"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 416
+        },
+        "category": "gi",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 100,
+          "group_b_count": 2736
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 416,
+          "group_b_count": 0
+        },
+        "subgroup": "trans_f"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 288
+        },
+        "category": "gi",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 100,
+          "group_b_count": 2736
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 288,
+          "group_b_count": 0
+        },
+        "subgroup": "trans_m"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "gi",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 76,
+          "group_b_count": 2760
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 76
+        },
+        "subgroup": "woman"
+      }
+    ],
+    "nationality": [
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 400
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 56,
+          "group_b_count": 1484
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 400,
+          "group_b_count": 16
+        },
+        "subgroup": "afghan"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 60
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 80,
+          "group_b_count": 1460
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 60,
+          "group_b_count": 20
+        },
+        "subgroup": "american"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 24,
+          "group_b_count": 1516
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 24
+        },
+        "subgroup": "australian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 36,
+          "group_b_count": 1504
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 36
+        },
+        "subgroup": "bangladeshi"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 12,
+          "group_b_count": 1528
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 12
+        },
+        "subgroup": "belgian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 48,
+          "group_b_count": 1492
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 48
+        },
+        "subgroup": "brazilian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 60
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 76,
+          "group_b_count": 1464
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 60,
+          "group_b_count": 16
+        },
+        "subgroup": "british"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 300
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 36,
+          "group_b_count": 1504
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 300,
+          "group_b_count": 16
+        },
+        "subgroup": "burmese"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 24,
+          "group_b_count": 1516
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 24
+        },
+        "subgroup": "canadian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 44,
+          "group_b_count": 1496
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 44
+        },
+        "subgroup": "chilean"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 300
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 28,
+          "group_b_count": 1512
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 300,
+          "group_b_count": 8
+        },
+        "subgroup": "chinese"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 20,
+          "group_b_count": 1520
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 20
+        },
+        "subgroup": "colombian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 20,
+          "group_b_count": 1520
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 20
+        },
+        "subgroup": "danish"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 24,
+          "group_b_count": 1516
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 24
+        },
+        "subgroup": "dominican"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 500
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 52,
+          "group_b_count": 1488
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 500,
+          "group_b_count": 12
+        },
+        "subgroup": "eritrean"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 500
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 64,
+          "group_b_count": 1476
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 500,
+          "group_b_count": 4
+        },
+        "subgroup": "ethiopian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 28,
+          "group_b_count": 1512
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 28
+        },
+        "subgroup": "finnish"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 32,
+          "group_b_count": 1508
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 32
+        },
+        "subgroup": "french"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 24,
+          "group_b_count": 1516
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 24
+        },
+        "subgroup": "german"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 20,
+          "group_b_count": 1520
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 20
+        },
+        "subgroup": "greek"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 500
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 108,
+          "group_b_count": 1432
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 500,
+          "group_b_count": 8
+        },
+        "subgroup": "guinean"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 32,
+          "group_b_count": 1508
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 32
+        },
+        "subgroup": "haitian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 36,
+          "group_b_count": 1504
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 36
+        },
+        "subgroup": "honduran"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 36,
+          "group_b_count": 1504
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 36
+        },
+        "subgroup": "hungarian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 24,
+          "group_b_count": 1516
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 24
+        },
+        "subgroup": "icelandic"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 220
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 88,
+          "group_b_count": 1452
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 220,
+          "group_b_count": 28
+        },
+        "subgroup": "indian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 300
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 36,
+          "group_b_count": 1504
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 300,
+          "group_b_count": 16
+        },
+        "subgroup": "indonesian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 400
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 88,
+          "group_b_count": 1452
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 400,
+          "group_b_count": 28
+        },
+        "subgroup": "iranian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 400
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 80,
+          "group_b_count": 1460
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 400,
+          "group_b_count": 20
+        },
+        "subgroup": "iraqi"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 40
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 64,
+          "group_b_count": 1476
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 40,
+          "group_b_count": 24
+        },
+        "subgroup": "irish"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 36,
+          "group_b_count": 1504
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 36
+        },
+        "subgroup": "israeli"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 20
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 64,
+          "group_b_count": 1476
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 20,
+          "group_b_count": 44
+        },
+        "subgroup": "italian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 300
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 84,
+          "group_b_count": 1456
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 300,
+          "group_b_count": 24
+        },
+        "subgroup": "japanese"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 500
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 1540
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 500,
+          "group_b_count": 0
+        },
+        "subgroup": "kenyan"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 300
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 80,
+          "group_b_count": 1460
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 300,
+          "group_b_count": 20
+        },
+        "subgroup": "korean"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 400
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 36,
+          "group_b_count": 1504
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 400,
+          "group_b_count": 16
+        },
+        "subgroup": "libyan"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 24,
+          "group_b_count": 1516
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 24
+        },
+        "subgroup": "lithuanian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 500
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 96,
+          "group_b_count": 1444
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 500,
+          "group_b_count": 16
+        },
+        "subgroup": "malian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 20,
+          "group_b_count": 1520
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 20
+        },
+        "subgroup": "mexican"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 44,
+          "group_b_count": 1496
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 44
+        },
+        "subgroup": "moldovan"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 16,
+          "group_b_count": 1524
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 16
+        },
+        "subgroup": "mongolian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 400
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 88,
+          "group_b_count": 1452
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 400,
+          "group_b_count": 28
+        },
+        "subgroup": "moroccan"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 500
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 108,
+          "group_b_count": 1432
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 500,
+          "group_b_count": 28
+        },
+        "subgroup": "mozambican"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 500
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 72,
+          "group_b_count": 1468
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 500,
+          "group_b_count": 12
+        },
+        "subgroup": "namibian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 540
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 152,
+          "group_b_count": 1388
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 540,
+          "group_b_count": 32
+        },
+        "subgroup": "nigerian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 16,
+          "group_b_count": 1524
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 16
+        },
+        "subgroup": "norwegian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 220
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 80,
+          "group_b_count": 1460
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 220,
+          "group_b_count": 20
+        },
+        "subgroup": "pakistani"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 400
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 64,
+          "group_b_count": 1476
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 400,
+          "group_b_count": 24
+        },
+        "subgroup": "palestinian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 12,
+          "group_b_count": 1528
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 12
+        },
+        "subgroup": "panamanian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 36,
+          "group_b_count": 1504
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 36
+        },
+        "subgroup": "peruvian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 20,
+          "group_b_count": 1520
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 20
+        },
+        "subgroup": "polish"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 12,
+          "group_b_count": 1528
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 12
+        },
+        "subgroup": "portuguese"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 36,
+          "group_b_count": 1504
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 36
+        },
+        "subgroup": "romanian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 20,
+          "group_b_count": 1520
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 20
+        },
+        "subgroup": "russian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 400
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 48,
+          "group_b_count": 1492
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 400,
+          "group_b_count": 8
+        },
+        "subgroup": "saudi"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 44,
+          "group_b_count": 1496
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 44
+        },
+        "subgroup": "senegalese"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 20,
+          "group_b_count": 1520
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 20
+        },
+        "subgroup": "slovak"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 32,
+          "group_b_count": 1508
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 32
+        },
+        "subgroup": "somali"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 32,
+          "group_b_count": 1508
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 32
+        },
+        "subgroup": "spanish"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 120
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 60,
+          "group_b_count": 1480
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 120,
+          "group_b_count": 20
+        },
+        "subgroup": "srilankan"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": false,
+          "group_a_count": 8,
+          "group_b_count": 1532
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 8
+        },
+        "subgroup": "swedish"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": false,
+          "group_a_count": 8,
+          "group_b_count": 1532
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 8
+        },
+        "subgroup": "swiss"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 400
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 72,
+          "group_b_count": 1468
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 400,
+          "group_b_count": 12
+        },
+        "subgroup": "syrian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 300
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 76,
+          "group_b_count": 1464
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 300,
+          "group_b_count": 16
+        },
+        "subgroup": "thai"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": false,
+          "group_a_count": 4,
+          "group_b_count": 1536
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 4
+        },
+        "subgroup": "turkish"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 12,
+          "group_b_count": 1528
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 12
+        },
+        "subgroup": "uzbekistani"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 24,
+          "group_b_count": 1516
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 24
+        },
+        "subgroup": "venezuelan"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 300
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 44,
+          "group_b_count": 1496
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 300,
+          "group_b_count": 24
+        },
+        "subgroup": "vietnamese"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 400
+        },
+        "category": "nationality",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 40,
+          "group_b_count": 1500
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 400,
+          "group_b_count": 20
+        },
+        "subgroup": "yemeni"
+      }
+    ],
+    "physical_appearance": [
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 208
+        },
+        "category": "physical_appearance",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 208,
+          "group_b_count": 580
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 208,
+          "group_b_count": 0
+        },
+        "subgroup": "negdress"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "physical_appearance",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 280,
+          "group_b_count": 508
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 280
+        },
+        "subgroup": "nonobese"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "physical_appearance",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 188,
+          "group_b_count": 600
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 188
+        },
+        "subgroup": "notpregnant"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "physical_appearance",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 48,
+          "group_b_count": 740
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 48
+        },
+        "subgroup": "novisibledifference"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 280
+        },
+        "category": "physical_appearance",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 280,
+          "group_b_count": 508
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 280,
+          "group_b_count": 0
+        },
+        "subgroup": "obese"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "physical_appearance",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 208,
+          "group_b_count": 580
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 208
+        },
+        "subgroup": "posdress"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 188
+        },
+        "category": "physical_appearance",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 188,
+          "group_b_count": 600
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 188,
+          "group_b_count": 0
+        },
+        "subgroup": "pregnant"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 64
+        },
+        "category": "physical_appearance",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 64,
+          "group_b_count": 724
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 64,
+          "group_b_count": 0
+        },
+        "subgroup": "short"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "physical_appearance",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 64,
+          "group_b_count": 724
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 64
+        },
+        "subgroup": "tall"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 48
+        },
+        "category": "physical_appearance",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 48,
+          "group_b_count": 740
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 48,
+          "group_b_count": 0
+        },
+        "subgroup": "visibledifference"
+      }
+    ],
+    "race": [
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "race",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 100,
+          "group_b_count": 3340
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 100
+        },
+        "subgroup": "african"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 1880
+        },
+        "category": "race",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 260,
+          "group_b_count": 3180
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 1880,
+          "group_b_count": 20
+        },
+        "subgroup": "africanamerican"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 480
+        },
+        "category": "race",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 1044,
+          "group_b_count": 2396
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 480,
+          "group_b_count": 604
+        },
+        "subgroup": "arab"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 480
+        },
+        "category": "race",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 1032,
+          "group_b_count": 2408
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 480,
+          "group_b_count": 552
+        },
+        "subgroup": "asian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 1880
+        },
+        "category": "race",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 1728,
+          "group_b_count": 1712
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 1880,
+          "group_b_count": 308
+        },
+        "subgroup": "black"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "race",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 64,
+          "group_b_count": 3376
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 64
+        },
+        "subgroup": "caucasian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "race",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 92,
+          "group_b_count": 3348
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 92
+        },
+        "subgroup": "european"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 1000
+        },
+        "category": "race",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 164,
+          "group_b_count": 3276
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 1000,
+          "group_b_count": 64
+        },
+        "subgroup": "hispanic"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 20
+        },
+        "category": "race",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 84,
+          "group_b_count": 3356
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 20,
+          "group_b_count": 64
+        },
+        "subgroup": "jewish"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 1000
+        },
+        "category": "race",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 1176,
+          "group_b_count": 2264
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 1000,
+          "group_b_count": 556
+        },
+        "subgroup": "latino"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 480
+        },
+        "category": "race",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 112,
+          "group_b_count": 3328
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 480,
+          "group_b_count": 72
+        },
+        "subgroup": "middleeastern"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 340
+        },
+        "category": "race",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 120,
+          "group_b_count": 3320
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 340,
+          "group_b_count": 60
+        },
+        "subgroup": "nativeamerican"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 20
+        },
+        "category": "race",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 84,
+          "group_b_count": 3356
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 20,
+          "group_b_count": 64
+        },
+        "subgroup": "roma"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "race",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 68,
+          "group_b_count": 3372
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 68
+        },
+        "subgroup": "southamerican"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "race",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 752,
+          "group_b_count": 2688
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 752
+        },
+        "subgroup": "white"
+      }
+    ],
+    "religion": [
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 60
+        },
+        "category": "religion",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 144,
+          "group_b_count": 456
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 60,
+          "group_b_count": 84
+        },
+        "subgroup": "atheist"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "religion",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 56,
+          "group_b_count": 544
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 56
+        },
+        "subgroup": "buddhist"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 160
+        },
+        "category": "religion",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 132,
+          "group_b_count": 468
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 160,
+          "group_b_count": 52
+        },
+        "subgroup": "catholic"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 120
+        },
+        "category": "religion",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 156,
+          "group_b_count": 444
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 120,
+          "group_b_count": 56
+        },
+        "subgroup": "christian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 60
+        },
+        "category": "religion",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 132,
+          "group_b_count": 468
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 60,
+          "group_b_count": 72
+        },
+        "subgroup": "hindu"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 80
+        },
+        "category": "religion",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 140,
+          "group_b_count": 460
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 80,
+          "group_b_count": 60
+        },
+        "subgroup": "jewish"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 200
+        },
+        "category": "religion",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 132,
+          "group_b_count": 468
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 200,
+          "group_b_count": 32
+        },
+        "subgroup": "mormon"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 200
+        },
+        "category": "religion",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 164,
+          "group_b_count": 436
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 200,
+          "group_b_count": 44
+        },
+        "subgroup": "muslim"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 120
+        },
+        "category": "religion",
+        "granularity": "fine",
+        "mention": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 600
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 120,
+          "group_b_count": 0
+        },
+        "subgroup": "orthodox"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "religion",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 72,
+          "group_b_count": 528
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 72
+        },
+        "subgroup": "protestant"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "religion",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 72,
+          "group_b_count": 528
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 72
+        },
+        "subgroup": "sikh"
+      }
+    ],
+    "ses": [
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "ses",
+        "granularity": "fine",
+        "mention": {
+          "computable": false,
+          "group_a_count": 3432,
+          "group_b_count": 0
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 3432
+        },
+        "subgroup": "highses"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 3432
+        },
+        "category": "ses",
+        "granularity": "fine",
+        "mention": {
+          "computable": false,
+          "group_a_count": 3432,
+          "group_b_count": 0
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 3432,
+          "group_b_count": 0
+        },
+        "subgroup": "lowses"
+      }
+    ],
+    "so": [
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 96
+        },
+        "category": "so",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 188,
+          "group_b_count": 244
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 96,
+          "group_b_count": 92
+        },
+        "subgroup": "bisexual"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 240
+        },
+        "category": "so",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 240,
+          "group_b_count": 192
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 240,
+          "group_b_count": 48
+        },
+        "subgroup": "gay"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 160
+        },
+        "category": "so",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 180,
+          "group_b_count": 252
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 160,
+          "group_b_count": 68
+        },
+        "subgroup": "lesbian"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": true,
+          "n_items_targeting_S": 32
+        },
+        "category": "so",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 140,
+          "group_b_count": 292
+        },
+        "role": {
+          "computable": true,
+          "group_a_count": 32,
+          "group_b_count": 108
+        },
+        "subgroup": "pansexual"
+      },
+      {
+        "bias_response_universe": {
+          "computable_in_principle": false,
+          "n_items_targeting_S": 0
+        },
+        "category": "so",
+        "granularity": "fine",
+        "mention": {
+          "computable": true,
+          "group_a_count": 116,
+          "group_b_count": 316
+        },
+        "role": {
+          "computable": false,
+          "group_a_count": 0,
+          "group_b_count": 116
+        },
+        "subgroup": "straight"
+      }
+    ]
+  }
+}

@@ -1,0 +1,72 @@
+
+============================================================
+age: 3680 items enriched
+  Fine subgroups in mentioned: 2 unique
+    {'nonold': 3680, 'old': 3680}
+  Aggregated subgroups in mentioned: 2 unique
+  Fine subgroups in bias_target: 2 unique
+    {'nonold': 2032, 'old': 1648}
+
+============================================================
+disability: 1556 items enriched
+  Fine subgroups in mentioned: 7 unique
+    {'nondisabled': 1556, 'mentallyill': 520, 'physicallydisabled': 432, 'autistic': 384, 'ddeaf': 92, 'peoplewithblindnessorlowvision': 80, 'peoplewithcognitivedisabilities': 48}
+  Aggregated subgroups in mentioned: 2 unique
+  Fine subgroups in bias_target: 6 unique
+    {'mentallyill': 520, 'physicallydisabled': 432, 'autistic': 384, 'ddeaf': 92, 'peoplewithblindnessorlowvision': 80, 'peoplewithcognitivedisabilities': 48}
+
+============================================================
+gi: 5672 items enriched
+  Fine subgroups in mentioned: 12 unique
+    {'f': 4616, 'm': 4616, 'nontrans': 464, 'trans': 464, 'nontrans_f': 200, 'trans_m': 200, 'nontrans_m': 200, 'trans_f': 200, 'man': 152, 'woman': 152, 'boy': 40, 'girl': 40}
+  Aggregated subgroups in mentioned: 12 unique
+  Fine subgroups in bias_target: 5 unique
+    {'f': 3344, 'm': 1464, 'trans': 864, 'trans_f': 832, 'trans_m': 576}
+
+============================================================
+nationality: 3080 items enriched
+  Fine subgroups in mentioned: 68 unique
+    {'nigerian': 304, 'mozambican': 216, 'guinean': 216, 'malian': 192, 'iranian': 176, 'indian': 176, 'moroccan': 176, 'japanese': 168, 'american': 160, 'korean': 160, 'iraqi': 160, 'pakistani': 160, 'british': 152, 'thai': 152, 'namibian': 144}
+  Aggregated subgroups in mentioned: 7 unique
+  Fine subgroups in bias_target: 31 unique
+    {'nigerian': 1080, 'eritrean': 1000, 'ethiopian': 1000, 'guinean': 1000, 'kenyan': 1000, 'malian': 1000, 'mozambican': 1000, 'namibian': 1000, 'afghan': 800, 'iranian': 800, 'iraqi': 800, 'libyan': 800, 'moroccan': 800, 'palestinian': 800, 'saudi': 800}
+
+============================================================
+physical_appearance: 1576 items enriched
+  Fine subgroups in mentioned: 10 unique
+    {'nonobese': 560, 'obese': 560, 'negdress': 416, 'posdress': 416, 'notpregnant': 376, 'pregnant': 376, 'short': 128, 'tall': 128, 'novisibledifference': 96, 'visibledifference': 96}
+  Aggregated subgroups in mentioned: 10 unique
+  Fine subgroups in bias_target: 5 unique
+    {'obese': 560, 'negdress': 416, 'pregnant': 376, 'short': 128, 'visibledifference': 96}
+
+============================================================
+race: 6880 items enriched
+  Fine subgroups in mentioned: 15 unique
+    {'black': 3456, 'latino': 2352, 'arab': 2088, 'asian': 2064, 'white': 1504, 'africanamerican': 520, 'hispanic': 328, 'nativeamerican': 240, 'middleeastern': 224, 'african': 200, 'european': 184, 'jewish': 168, 'roma': 168, 'southamerican': 136, 'caucasian': 128}
+  Aggregated subgroups in mentioned: 15 unique
+  Fine subgroups in bias_target: 10 unique
+    {'africanamerican': 3760, 'black': 3760, 'hispanic': 2000, 'latino': 2000, 'asian': 960, 'arab': 960, 'middleeastern': 960, 'nativeamerican': 680, 'roma': 40, 'jewish': 40}
+
+============================================================
+religion: 1200 items enriched
+  Fine subgroups in mentioned: 10 unique
+    {'muslim': 328, 'christian': 312, 'atheist': 288, 'jewish': 280, 'hindu': 264, 'mormon': 264, 'catholic': 264, 'protestant': 144, 'sikh': 144, 'buddhist': 112}
+  Aggregated subgroups in mentioned: 10 unique
+  Fine subgroups in bias_target: 8 unique
+    {'muslim': 400, 'mormon': 400, 'catholic': 320, 'orthodox': 240, 'christian': 240, 'jewish': 160, 'hindu': 120, 'atheist': 120}
+
+============================================================
+ses: 6864 items enriched
+  Fine subgroups in mentioned: 2 unique
+    {'highses': 6864, 'lowses': 6864}
+  Aggregated subgroups in mentioned: 2 unique
+  Fine subgroups in bias_target: 1 unique
+    {'lowses': 6864}
+
+============================================================
+so: 864 items enriched
+  Fine subgroups in mentioned: 5 unique
+    {'gay': 480, 'bisexual': 376, 'lesbian': 360, 'pansexual': 280, 'straight': 232}
+  Aggregated subgroups in mentioned: 5 unique
+  Fine subgroups in bias_target: 4 unique
+    {'gay': 480, 'lesbian': 320, 'bisexual': 192, 'pansexual': 64}
