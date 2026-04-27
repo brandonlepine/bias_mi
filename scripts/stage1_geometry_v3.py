@@ -100,7 +100,15 @@ class S:
     DEGENERATE = "degenerate"
     NEVER_TARGETED = "never_targeted"
     NORM_NEAR_ZERO = "norm_near_zero"
+    PAIRED_MENTION_DEGENERATE = "paired_mention_degenerate"
+    PAIRED_TARGET_DEGENERATE = "paired_target_degenerate"
 
+
+ALL_STATUSES = [
+    S.COMPUTABLE, S.INSUFFICIENT_ITEMS, S.STRUCTURALLY_UNDEFINED,
+    S.DEGENERATE, S.NEVER_TARGETED, S.NORM_NEAR_ZERO,
+    S.PAIRED_MENTION_DEGENERATE, S.PAIRED_TARGET_DEGENERATE,
+]
 
 STATUS_COLORS = {
     S.COMPUTABLE: WONG["green"],
@@ -109,6 +117,8 @@ STATUS_COLORS = {
     S.DEGENERATE: WONG["sky_blue"],
     S.NEVER_TARGETED: WONG["vermillion"],
     S.NORM_NEAR_ZERO: WONG["yellow"],
+    S.PAIRED_MENTION_DEGENERATE: "#888888",
+    S.PAIRED_TARGET_DEGENERATE: "#AAAAAA",
 }
 STATUS_SHORT = {
     S.COMPUTABLE: "OK",
@@ -117,6 +127,8 @@ STATUS_SHORT = {
     S.DEGENERATE: "degen",
     S.NEVER_TARGETED: "no tgt",
     S.NORM_NEAR_ZERO: "||d||~0",
+    S.PAIRED_MENTION_DEGENERATE: "paired",
+    S.PAIRED_TARGET_DEGENERATE: "co-tgt",
 }
 
 NORM_EPSILON = 1e-6
@@ -150,7 +162,9 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Stage 1 v3: Corrected Geometry Pipeline")
     p.add_argument("--run_dir", type=str, required=True)
     p.add_argument("--layers", type=str, default="14",
-                   help="Comma-separated layer indices; first is primary")
+                   help="Comma-separated layer indices")
+    p.add_argument("--primary_layer", type=int, default=14,
+                   help="Primary layer for summaries and figures")
     p.add_argument("--min_n", type=int, default=10)
     p.add_argument("--race_handling", type=str, default="stripped",
                    choices=["stripped", "intersectional"])
@@ -600,6 +614,26 @@ def load_layer_hidden_states(
 DirectionKey = tuple[str, str, str, str]  # (cat, gran, subgroup, direction_type)
 
 
+def _detect_paired_degeneracy(
+    records: list[ItemRecord], subgroup: str, field: str,
+) -> list[str]:
+    """Find subgroups mentioned/targeted in EXACTLY the same item set as `subgroup`."""
+    s_items = frozenset(i for i, r in enumerate(records) if subgroup in r.get(field, []))
+    if not s_items:
+        return []
+    all_subs: set[str] = set()
+    for r in records:
+        all_subs.update(r.get(field, []))
+    paired = []
+    for other in sorted(all_subs):
+        if other == subgroup:
+            continue
+        other_items = frozenset(i for i, r in enumerate(records) if other in r.get(field, []))
+        if other_items == s_items:
+            paired.append(other)
+    return paired
+
+
 def determine_all_statuses(
     unified_items: dict[str, list[ItemRecord]],
     categories: list[str],
@@ -609,7 +643,8 @@ def determine_all_statuses(
     """Determine status for every (cat, gran, sub, dir_type) tuple.
 
     Returns {key: {"status": str, "n_a": int, "n_b": int, "reason": str,
-                    "group_a_idxs": list, "group_b_idxs": list}}.
+                    "group_a_idxs": list, "group_b_idxs": list,
+                    "paired_with": list (optional)}}.
     """
     status_map: dict[DirectionKey, dict] = {}
 
@@ -632,6 +667,15 @@ def determine_all_statuses(
             mention_sets = [frozenset(r.get(mention_col, [])) for r in records]
             all_same_mention = len(set(mention_sets)) == 1 and len(mention_sets) > 0
 
+            # Pre-compute paired-mention clusters (once per category×granularity)
+            mention_paired_cache: dict[str, list[str]] = {}
+            target_paired_cache: dict[str, list[str]] = {}
+            for sub in sorted(all_subs):
+                mention_paired_cache[sub] = _detect_paired_degeneracy(
+                    records, sub, mention_col)
+                target_paired_cache[sub] = _detect_paired_degeneracy(
+                    records, sub, target_col)
+
             for sub in sorted(all_subs):
                 for dir_type in DIRECTION_TYPES:
                     key: DirectionKey = (cat, gran, sub, dir_type)
@@ -639,16 +683,19 @@ def determine_all_statuses(
                         records, sub, dir_type, mention_col, target_col,
                     )
 
-                    # Status determination (ordered)
-                    if dir_type == "mention" and all_same_mention:
+                    # --- Status determination (ordered per spec) ---
+
+                    # 1. STRUCTURALLY_UNDEFINED
+                    if len(a_idxs) == 0 and len(b_idxs) == 0:
                         status_map[key] = {
-                            "status": S.DEGENERATE, "n_a": len(a_idxs),
-                            "n_b": len(b_idxs),
-                            "reason": "All items mention the same subgroup set",
-                            "group_a_idxs": a_idxs, "group_b_idxs": b_idxs,
+                            "status": S.STRUCTURALLY_UNDEFINED,
+                            "n_a": 0, "n_b": 0,
+                            "reason": "Both groups empty",
+                            "group_a_idxs": [], "group_b_idxs": [],
                         }
                         continue
 
+                    # 2. NEVER_TARGETED
                     if dir_type in ("role", "bias_response"):
                         n_targeting = sum(
                             1 for r in records if sub in r.get(target_col, [])
@@ -662,15 +709,41 @@ def determine_all_statuses(
                             }
                             continue
 
-                    if len(a_idxs) == 0 and len(b_idxs) == 0:
+                    # 3. PAIRED_MENTION_DEGENERATE / PAIRED_TARGET_DEGENERATE
+                    if dir_type == "mention":
+                        paired = mention_paired_cache.get(sub, [])
+                        if paired:
+                            status_map[key] = {
+                                "status": S.PAIRED_MENTION_DEGENERATE,
+                                "n_a": len(a_idxs), "n_b": len(b_idxs),
+                                "reason": f"Mention-paired with {paired}",
+                                "group_a_idxs": a_idxs, "group_b_idxs": b_idxs,
+                                "paired_with": paired,
+                            }
+                            continue
+                    elif dir_type in ("role", "bias_response"):
+                        paired = target_paired_cache.get(sub, [])
+                        if paired:
+                            status_map[key] = {
+                                "status": S.PAIRED_TARGET_DEGENERATE,
+                                "n_a": len(a_idxs), "n_b": len(b_idxs),
+                                "reason": f"Co-targeted with {paired}",
+                                "group_a_idxs": a_idxs, "group_b_idxs": b_idxs,
+                                "paired_with": paired,
+                            }
+                            continue
+
+                    # 4. DEGENERATE (all items mention same set)
+                    if dir_type == "mention" and all_same_mention:
                         status_map[key] = {
-                            "status": S.STRUCTURALLY_UNDEFINED,
-                            "n_a": 0, "n_b": 0,
-                            "reason": "Both groups empty",
-                            "group_a_idxs": [], "group_b_idxs": [],
+                            "status": S.DEGENERATE, "n_a": len(a_idxs),
+                            "n_b": len(b_idxs),
+                            "reason": "All items mention the same subgroup set",
+                            "group_a_idxs": a_idxs, "group_b_idxs": b_idxs,
                         }
                         continue
 
+                    # 5. INSUFFICIENT_ITEMS
                     if len(a_idxs) < min_n or len(b_idxs) < min_n:
                         status_map[key] = {
                             "status": S.INSUFFICIENT_ITEMS,
@@ -680,7 +753,8 @@ def determine_all_statuses(
                         }
                         continue
 
-                    # Will be computed — status set after direction computation
+                    # 6. NORM_NEAR_ZERO checked after direction computation
+                    # 7. COMPUTABLE (tentative — may be downgraded after compute)
                     status_map[key] = {
                         "status": S.COMPUTABLE,
                         "n_a": len(a_idxs), "n_b": len(b_idxs),
@@ -970,8 +1044,9 @@ def run_all_probes(
 ) -> list[dict]:
     """Run probes with per-layer JSONL checkpointing.
 
-    Each layer gets its own checkpoint file so layers don't collide.
-    Both per-fold rows AND mean rows are checkpointed.
+    Each layer gets its own checkpoint file. Per-fold rows AND a mean row
+    are checkpointed per direction. n_train and n_test are from real
+    GroupKFold splits — never zero for computable directions.
     """
     progress_path = output_dir / f"_probe_progress_L{layer}.jsonl"
     completed = load_probe_progress(progress_path)
@@ -985,9 +1060,8 @@ def run_all_probes(
             qi = r.get("question_index", "0")
             qi_lookup[r["item_idx"]] = int(qi) if str(qi).isdigit() else hash(qi) % 10000
 
-    # Start with previously completed rows
     rows: list[dict] = []
-    for ckpt_key, ckpt_rows in completed.items():
+    for ckpt_rows in completed.values():
         rows.extend(ckpt_rows)
     skipped = 0
 
@@ -1001,16 +1075,13 @@ def run_all_probes(
             continue
 
         info = status_map[key]
-        a_idxs = info["group_a_idxs"]
-        b_idxs = info["group_b_idxs"]
-
         X_list, y_list, groups = [], [], []
-        for idx in a_idxs:
+        for idx in info["group_a_idxs"]:
             if idx in hidden_states:
                 X_list.append(hidden_states[idx])
                 y_list.append(1)
                 groups.append(qi_lookup.get(idx, idx))
-        for idx in b_idxs:
+        for idx in info["group_b_idxs"]:
             if idx in hidden_states:
                 X_list.append(hidden_states[idx])
                 y_list.append(0)
@@ -1037,12 +1108,12 @@ def run_all_probes(
         y = np.array(y_list)
         g = np.array(groups)
 
-        n_groups = len(np.unique(g))
-        eff_folds = min(n_folds, n_groups)
+        n_unique_groups = len(np.unique(g))
+        eff_folds = min(n_folds, n_unique_groups)
         if eff_folds < 2:
             skip_row = {
                 **row_base, "auroc": None, "auroc_ci_low": None,
-                "auroc_ci_high": None, "n_train": len(X), "n_test": 0,
+                "auroc_ci_high": None, "n_train": int(len(X)), "n_test": 0,
                 "status": S.INSUFFICIENT_ITEMS, "fold_idx": -1,
                 "group_a_train": 0, "group_b_train": 0,
                 "group_a_test": 0, "group_b_test": 0,
@@ -1054,37 +1125,73 @@ def run_all_probes(
         gkf = GroupKFold(n_splits=eff_folds)
         fold_aurocs: list[float] = []
         direction_rows: list[dict] = []
+        total_n_test = 0
 
-        for fold_i, (tr, te) in enumerate(gkf.split(X, y, g)):
-            if len(np.unique(y[tr])) < 2 or len(np.unique(y[te])) < 2:
+        for fold_i, (tr_idx, te_idx) in enumerate(gkf.split(X, y, g)):
+            X_train, X_test = X[tr_idx], X[te_idx]
+            y_train, y_test = y[tr_idx], y[te_idx]
+            n_train = int(len(tr_idx))
+            n_test = int(len(te_idx))
+
+            # Hard assertions
+            if n_test == 0:
+                log(f"    WARNING: fold {fold_i} has n_test=0 for "
+                    f"{cat}/{sub}/{dir_type}. Skipping fold.")
                 continue
+            if len(np.unique(y_train)) < 2:
+                continue
+            if len(np.unique(y_test)) < 2:
+                # Both classes not in test set — AUROC is undefined
+                fold_row = {
+                    **row_base, "fold_idx": fold_i, "auroc": None,
+                    "auroc_ci_low": None, "auroc_ci_high": None,
+                    "n_train": n_train, "n_test": n_test,
+                    "group_a_train": int((y_train == 1).sum()),
+                    "group_b_train": int((y_train == 0).sum()),
+                    "group_a_test": int((y_test == 1).sum()),
+                    "group_b_test": int((y_test == 0).sum()),
+                    "status": "degenerate_fold",
+                }
+                direction_rows.append(fold_row)
+                total_n_test += n_test
+                continue
+
             try:
                 pipe = make_probe_pipeline(seed=seed)
-                pipe.fit(X[tr], y[tr])
-                proba = pipe.predict_proba(X[te])[:, 1]
-                auroc = roc_auc_score(y[te], proba)
+                pipe.fit(X_train, y_train)
+                y_score = pipe.predict_proba(X_test)[:, 1]
+
+                # Sanity: y_test and y_score must be same length
+                assert len(y_test) == len(y_score) == n_test
+
+                auroc = float(roc_auc_score(y_test, y_score))
                 fold_aurocs.append(auroc)
+                total_n_test += n_test
 
                 fold_row = {
                     **row_base, "fold_idx": fold_i, "auroc": auroc,
                     "auroc_ci_low": None, "auroc_ci_high": None,
-                    "n_train": int(len(tr)), "n_test": int(len(te)),
-                    "group_a_train": int((y[tr] == 1).sum()),
-                    "group_b_train": int((y[tr] == 0).sum()),
-                    "group_a_test": int((y[te] == 1).sum()),
-                    "group_b_test": int((y[te] == 0).sum()),
+                    "n_train": n_train, "n_test": n_test,
+                    "group_a_train": int((y_train == 1).sum()),
+                    "group_b_train": int((y_train == 0).sum()),
+                    "group_a_test": int((y_test == 1).sum()),
+                    "group_b_test": int((y_test == 0).sum()),
                     "status": S.COMPUTABLE,
                 }
                 direction_rows.append(fold_row)
-            except Exception:
+            except Exception as e:
+                log(f"    WARNING: fold {fold_i} failed for "
+                    f"{cat}/{sub}/{dir_type}: {e}")
                 continue
 
-        # Mean row
+        # Mean summary row
         mean_auroc = float(np.mean(fold_aurocs)) if fold_aurocs else None
+        mean_n_test = total_n_test // max(len(fold_aurocs), 1) if fold_aurocs else 0
         mean_row = {
             **row_base, "fold_idx": -1, "auroc": mean_auroc,
             "auroc_ci_low": None, "auroc_ci_high": None,
-            "n_train": int(len(X)), "n_test": int(sum(len(te) for _, te in gkf.split(X, y, g)) // eff_folds) if fold_aurocs else 0,
+            "n_train": int(len(X)) - mean_n_test if fold_aurocs else int(len(X)),
+            "n_test": mean_n_test,
             "group_a_train": int((y == 1).sum()),
             "group_b_train": int((y == 0).sum()),
             "group_a_test": 0, "group_b_test": 0,
@@ -1579,35 +1686,40 @@ def self_validate(
     output_dir: Path,
     cos_rows: list[dict],
     summary_rows: list[dict],
+    probe_rows: list[dict],
     status_map: dict[DirectionKey, dict],
     categories: list[str],
     primary_layer: int,
     discrepancy: dict,
 ) -> bool:
-    """Run self-validation checks. Returns True if all pass."""
-    checks: list[tuple[str, bool, str]] = []
+    """Run the 11-check self-validation suite. Returns True if all hard checks pass."""
+    checks: list[tuple[str, bool, str, bool]] = []  # (name, passed, detail, is_hard_fail)
 
-    # 1. Parquets exist and non-empty
-    for name in ["directions_summary.parquet", "pairwise_cosines.parquet",
-                  "direction_alignment.parquet"]:
+    # 1. All output files exist and non-empty
+    for name in ["directions.npz", "directions_summary.parquet",
+                  "pairwise_cosines.parquet", "direction_alignment.parquet",
+                  "geometry_summary.json", "audit_discrepancy_report.json",
+                  "status_inventory.json"]:
         p = output_dir / name
         exists = p.is_file()
-        non_empty = False
-        if exists:
-            df = pd.read_parquet(p)
-            non_empty = len(df) > 0
-        checks.append((f"{name} exists and non-empty", exists and non_empty,
-                        f"exists={exists}, rows={len(df) if exists else 0}"))
+        sz = p.stat().st_size if exists else 0
+        checks.append((f"{name} exists", exists and sz > 0,
+                        f"exists={exists}, size={sz}", True))
+    fig_dir = output_dir / "figures"
+    fig_count = len(list(fig_dir.glob("*.png"))) if fig_dir.exists() else 0
+    checks.append(("Figures exist", fig_count > 0, f"{fig_count} PNGs", True))
 
-    # 2. Each category has rows at primary layer
-    dirs_df = pd.DataFrame(summary_rows)
+    # 2. All 9 categories at primary layer
+    dirs_df = pd.DataFrame(summary_rows) if summary_rows else pd.DataFrame()
     for cat in categories:
-        has_rows = len(dirs_df[
-            (dirs_df["category"] == cat) & (dirs_df["layer"] == primary_layer)
-        ]) > 0
-        checks.append((f"{cat} has rows at L{primary_layer}", has_rows, ""))
+        has = False
+        if not dirs_df.empty:
+            has = len(dirs_df[
+                (dirs_df["category"] == cat) & (dirs_df["layer"] == primary_layer)
+            ]) > 0
+        checks.append((f"{cat} at L{primary_layer}", has, "", True))
 
-    # 3. No unexpected cosine=1.0 between distinct subgroups
+    # 3. No cosine=1.0 between distinct subgroups
     cos_df = pd.DataFrame(cos_rows) if cos_rows else pd.DataFrame()
     if not cos_df.empty:
         exact_ones = cos_df[
@@ -1616,49 +1728,155 @@ def self_validate(
         ]
         n_ones = len(exact_ones)
         checks.append((
-            "No unexpected cosine=1.0 between distinct subgroups",
+            "No cosine=1.0 between distinct subgroups",
             n_ones == 0,
-            f"{n_ones} exact 1.0 pairs found" if n_ones > 0 else "OK",
+            f"{n_ones} pairs" if n_ones > 0 else "OK", True,
         ))
         if n_ones > 0:
-            for _, r in exact_ones.iterrows():
-                log(f"    WARNING: cosine=1.0: {r['category']}/{r['subgroup_i']} vs {r['subgroup_j']} "
+            for _, r in exact_ones.head(10).iterrows():
+                log(f"    cos=1.0: {r['category']}/{r['subgroup_i']} vs {r['subgroup_j']} "
                     f"({r['direction_type']}, {r['granularity']})")
-
-    # 4. Non-computable status → NaN direction_norm
-    for row in summary_rows:
-        if row["status"] != S.COMPUTABLE:
-            if row.get("direction_norm") is not None and not (
-                isinstance(row["direction_norm"], float) and math.isnan(row["direction_norm"])
-            ):
-                checks.append(("Non-computable → NaN norm", False,
-                                f"{row['category']}/{row['subgroup']}/{row['direction_type']} "
-                                f"status={row['status']} but norm={row['direction_norm']}"))
-                break
     else:
-        checks.append(("Non-computable → NaN norm", True, "All consistent"))
+        checks.append(("No cosine=1.0 (empty df)", True, "OK", True))
 
-    # 5. Audit discrepancy reported
+    # 4. No probe n_test==0 for computable directions
+    probes_df = pd.DataFrame(probe_rows) if probe_rows else pd.DataFrame()
+    if not probes_df.empty:
+        bad_probes = probes_df[
+            (probes_df["status"] == S.COMPUTABLE)
+            & (probes_df["fold_idx"] >= 0)
+            & (probes_df["n_test"] == 0)
+        ]
+        checks.append((
+            "No computable probe fold with n_test=0",
+            len(bad_probes) == 0,
+            f"{len(bad_probes)} bad rows" if len(bad_probes) > 0 else "OK", True,
+        ))
+    else:
+        checks.append(("Probe n_test check (no probes)", True, "skipped", False))
+
+    # 5. AUROC distribution (warn, not hard fail)
+    if not probes_df.empty:
+        mean_probes = probes_df[
+            (probes_df["fold_idx"] == -1) & probes_df["auroc"].notna()
+            & (probes_df["status"] == S.COMPUTABLE)
+        ]
+        if not mean_probes.empty:
+            log("\n  Per-direction-type mean AUROC distribution:")
+            for dt in DIRECTION_TYPES:
+                dt_aurocs = mean_probes[mean_probes["direction_type"] == dt]["auroc"]
+                if len(dt_aurocs) > 0:
+                    below_04 = int((dt_aurocs < 0.4).sum())
+                    above_095 = int((dt_aurocs > 0.95).sum())
+                    log(f"    {dt:15s} min={dt_aurocs.min():.3f} median={dt_aurocs.median():.3f} "
+                        f"max={dt_aurocs.max():.3f} n_below_0.4={below_04} n_above_0.95={above_095}")
+                    if below_04 > 0:
+                        bad = mean_probes[
+                            (mean_probes["direction_type"] == dt) & (mean_probes["auroc"] < 0.4)
+                        ]
+                        for _, r in bad.iterrows():
+                            log(f"      AUROC<0.4: {r['category']}/{r['subgroup']} = {r['auroc']:.3f}")
+            median_all = mean_probes["auroc"].median()
+            checks.append((
+                "AUROC median in [0.5, 0.95]",
+                0.5 <= median_all <= 0.95,
+                f"median={median_all:.3f}", False,
+            ))
+
+    # 6. Status counts add up
+    if not dirs_df.empty:
+        for cat in categories:
+            for gran in dirs_df[dirs_df["category"] == cat]["granularity"].unique():
+                layer_df = dirs_df[
+                    (dirs_df["category"] == cat) & (dirs_df["granularity"] == gran)
+                    & (dirs_df["layer"] == primary_layer)
+                ]
+                n_subs = layer_df["subgroup"].nunique()
+                for dt in DIRECTION_TYPES:
+                    n_dt = len(layer_df[layer_df["direction_type"] == dt])
+                    if n_dt != n_subs:
+                        checks.append((
+                            f"Status count {cat}/{gran}/{dt}",
+                            False, f"{n_dt} rows vs {n_subs} subgroups", True,
+                        ))
+                        break
+        else:
+            checks.append(("Status counts consistent", True, "OK", True))
+
+    # 7. Non-COMPUTABLE → NaN norm
+    norm_ok = True
+    for row in summary_rows:
+        if row["status"] != S.COMPUTABLE and row.get("direction_norm") is not None:
+            if not (isinstance(row["direction_norm"], float) and math.isnan(row["direction_norm"])):
+                norm_ok = False
+                break
+    checks.append(("Non-COMPUTABLE → NaN norm", norm_ok, "", True))
+
+    # 8. Audit discrepancies surfaced (info only, not hard fail)
     checks.append((
-        "Audit discrepancy reported",
+        "Audit discrepancies reported",
         True,
-        f"audit_yes_script_no={discrepancy['n_audit_says_computable_but_script_failed']}, "
-        f"audit_no_script_yes={discrepancy['n_audit_says_uncomputable_but_script_succeeded']}",
+        f"yes→no={discrepancy.get('n_audit_says_computable_but_script_failed', '?')}, "
+        f"no→yes={discrepancy.get('n_audit_says_uncomputable_but_script_succeeded', '?')}",
+        False,
     ))
+    # Print full list
+    for d in discrepancy.get("discrepancies", []):
+        log(f"    {d['category']}/{d['subgroup']}/{d['direction_type']} "
+            f"[{d['granularity']}]: audit={d['audit_says']}, script={d['script_status']} "
+            f"— {d.get('diagnostic', '')}")
 
-    # 6. Figures exist
-    fig_dir = output_dir / "figures"
-    fig_count = len(list(fig_dir.glob("*.png"))) if fig_dir.exists() else 0
-    checks.append(("Figures directory has files", fig_count > 0, f"{fig_count} PNGs"))
+    # 9. Probe AUROC sanity
+    if not probes_df.empty:
+        mean_probes = probes_df[
+            (probes_df["fold_idx"] == -1) & probes_df["auroc"].notna()
+            & (probes_df["status"] == S.COMPUTABLE)
+        ]
+        n_below_04 = int((mean_probes["auroc"] < 0.4).sum()) if not mean_probes.empty else 0
+        n_total = len(mean_probes)
+        pct = 100 * n_below_04 / n_total if n_total > 0 else 0
+        checks.append((
+            "Probe AUROC<0.4 count",
+            pct <= 5.0,
+            f"{n_below_04}/{n_total} ({pct:.1f}%)", pct > 5.0,
+        ))
+
+    # 10. Paired degeneracy counts
+    paired_mention = sum(1 for v in status_map.values()
+                         if v["status"] == S.PAIRED_MENTION_DEGENERATE)
+    paired_target = sum(1 for v in status_map.values()
+                        if v["status"] == S.PAIRED_TARGET_DEGENERATE)
+    log(f"\n  Paired degeneracy: {paired_mention} mention, {paired_target} target")
+    for cat in categories:
+        pm = sum(1 for (c, g, s, d), v in status_map.items()
+                 if c == cat and v["status"] == S.PAIRED_MENTION_DEGENERATE)
+        pt = sum(1 for (c, g, s, d), v in status_map.items()
+                 if c == cat and v["status"] == S.PAIRED_TARGET_DEGENERATE)
+        if pm + pt > 0:
+            log(f"    {cat}: {pm} mention-paired, {pt} target-paired")
+    checks.append(("Paired degeneracy reported", True,
+                    f"mention={paired_mention}, target={paired_target}", False))
+
+    # 11. Primary layer = 14
+    summary_path = output_dir / "geometry_summary.json"
+    if summary_path.exists():
+        with open(summary_path) as f:
+            gs = json.load(f)
+        actual_primary = gs.get("primary_layer")
+        checks.append((
+            "Primary layer = 14",
+            actual_primary == 14,
+            f"actual={actual_primary}", True,
+        ))
 
     # Print results
     log("\n" + "=" * 72)
     log("SELF-VALIDATION")
     log("=" * 72)
     all_pass = True
-    for name, passed, detail in checks:
-        status = "PASS" if passed else "FAIL"
-        if not passed:
+    for name, passed, detail, is_hard in checks:
+        status = "PASS" if passed else ("FAIL" if is_hard else "WARN")
+        if not passed and is_hard:
             all_pass = False
         log(f"  [{status}] {name}: {detail}")
 
@@ -1777,7 +1995,10 @@ def main() -> None:
     t0 = time.time()
 
     layers = [int(x) for x in args.layers.split(",")]
-    primary_layer = layers[0]
+    primary_layer = args.primary_layer
+    if primary_layer not in layers:
+        layers.append(primary_layer)
+        layers.sort()
 
     log("Stage 1 v3: Corrected Geometry Pipeline")
     log(f"  Run dir: {run_dir}")
@@ -1839,8 +2060,9 @@ def main() -> None:
         )
 
         all_pass = self_validate(
-            output_dir, all_cos_rows, all_summary_rows, global_status_map,
-            categories, primary_layer, discrepancy,
+            output_dir, all_cos_rows, all_summary_rows,
+            all_probe_rows if 'all_probe_rows' in dir() else [],
+            global_status_map, categories, primary_layer, discrepancy,
         )
         elapsed = time.time() - t0
         log(f"\nRegenerate complete in {elapsed:.1f}s")
@@ -1916,8 +2138,9 @@ def main() -> None:
         )
 
         all_pass = self_validate(
-            output_dir, all_cos_rows, all_summary_rows, global_status_map,
-            categories, primary_layer, discrepancy,
+            output_dir, all_cos_rows, all_summary_rows,
+            all_probe_rows if 'all_probe_rows' in dir() else [],
+            global_status_map, categories, primary_layer, discrepancy,
         )
         elapsed = time.time() - t0
         log(f"\nProbes-only complete in {elapsed:.1f}s")
@@ -2044,8 +2267,8 @@ def main() -> None:
     )
 
     all_pass = self_validate(
-        output_dir, all_cos_rows, all_summary_rows, global_status_map,
-        categories, primary_layer, discrepancy,
+        output_dir, all_cos_rows, all_summary_rows, all_probe_rows,
+        global_status_map, categories, primary_layer, discrepancy,
     )
 
     elapsed = time.time() - t0
